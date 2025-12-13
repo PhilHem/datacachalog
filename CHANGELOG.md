@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-14
+
+### Added
+
+- **Configuration Ergonomics**
+  - `Catalog.from_directory()` factory - auto-discover project root and create catalog with sensible defaults
+  - `Dataset.with_resolved_paths(root)` - resolve relative cache paths against project root
+  - `find_project_root()` utility for locating project root via marker files
+- **Write Support**
+  - `catalog.push(name, local_path)` - upload local files to remote storage
+  - Progress reporting for upload operations
+- **Progress & Parallelism**
+  - `fetch_all()` with parallel downloads and aggregate progress display
+  - Per-file download progress (bytes transferred)
+  - Export `RichProgressReporter` from package root
+- **Error Handling**
+  - Domain exceptions with `recovery_hint` property for actionable error messages
+  - Exception hierarchy: `DatacachalogError`, `StorageError`, `CacheError`, `ConfigurationError`
+
 ## [0.2.0] - 2025-12-13
 
 ### Added
@@ -27,5 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
 - Port definitions: `StoragePort`, `CachePort`
 
+[0.3.0]: https://github.com/PhilHem/datacachalog/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PhilHem/datacachalog/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/PhilHem/datacachalog/releases/tag/v0.1.1
