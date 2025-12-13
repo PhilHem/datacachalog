@@ -17,7 +17,7 @@ from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
 from datacachalog.core.ports import CachePort, ProgressCallback, StoragePort
 
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "CacheMetadata",
