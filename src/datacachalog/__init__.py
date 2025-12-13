@@ -20,6 +20,7 @@ from datacachalog.adapters.storage import (
     S3Storage,
     create_router,
 )
+from datacachalog.config import find_project_root
 from datacachalog.core.exceptions import (
     CacheCorruptError,
     CacheError,
@@ -69,4 +70,5 @@ __all__ = [
     "StoragePort",
     "__version__",
     "create_router",
+    "find_project_root",
 ]

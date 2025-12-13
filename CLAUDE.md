@@ -143,6 +143,7 @@ Exception hierarchy:
 ```
 src/datacachalog/
 ├── __init__.py          # Re-exports: Dataset, Catalog
+├── config.py            # Project root discovery utility
 ├── core/
 │   ├── exceptions.py    # Domain exceptions with recovery hints
 │   ├── models.py        # Dataset, CacheMetadata, FileMetadata

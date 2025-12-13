@@ -41,6 +41,11 @@
 - [x] Error handling and meaningful exceptions
 - [x] Documentation and examples
 
+## Phase 6: Configuration Ergonomics
+
+- [ ] `Dataset.with_resolved_paths(root)` - resolve relative cache_path against project root
+- [ ] `Catalog.from_directory()` factory - auto-discover root and create with sensible defaults
+
 ## Future
 
 - Glob pattern support for multi-file datasets
@@ -58,10 +63,12 @@ Decisions needed before or during implementation:
 
 ### Project Root Discovery
 How do we find project root for resolving relative paths?
-- [ ] Look for `.git` directory
-- [ ] Look for `pyproject.toml`
-- [ ] Marker file like `.datacachalog`
-- [ ] Explicit configuration only
+- [x] Look for `.git` directory
+- [x] Look for `pyproject.toml`
+- [x] Marker file like `.datacachalog`
+- [ ] ~~Explicit configuration only~~ (supported via `start` parameter)
+
+**Resolved**: Implemented `find_project_root()` in `config.py` with marker priority: `.datacachalog` > `pyproject.toml` > `.git`
 
 ### Source Path Derivation
 For `s3://bucket/path/to/file.parquet` with `cache_dir="./data"`, what's the local path?
