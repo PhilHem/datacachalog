@@ -145,6 +145,27 @@ class TestUpload:
         assert dest.exists()
         assert dest.read_text() == "hello world"
 
+    def test_upload_reports_progress(self, tmp_path: Path) -> None:
+        """upload() should call progress callback with bytes."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        local = tmp_path / "local.txt"
+        dest = tmp_path / "remote.txt"
+        content = "x" * 1000
+        local.write_text(content)
+
+        progress_calls: list[tuple[int, int]] = []
+
+        def track_progress(uploaded: int, total: int) -> None:
+            progress_calls.append((uploaded, total))
+
+        storage = FilesystemStorage()
+        storage.upload(local, str(dest), progress=track_progress)
+
+        assert len(progress_calls) > 0
+        assert progress_calls[-1][0] == 1000
+        assert progress_calls[-1][1] == 1000
+
 
 @pytest.mark.storage
 class TestProtocolConformance:

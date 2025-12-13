@@ -26,8 +26,16 @@ class StoragePort(Protocol):
         """Download a file from remote storage to local path."""
         ...
 
-    def upload(self, local: Path, dest: str) -> None:
-        """Upload a local file to remote storage."""
+    def upload(
+        self, local: Path, dest: str, progress: ProgressCallback | None = None
+    ) -> None:
+        """Upload a local file to remote storage with optional progress.
+
+        Args:
+            local: Path to local file.
+            dest: Remote destination URI.
+            progress: Optional callback function(bytes_uploaded, total_bytes).
+        """
         ...
 
     def head(self, source: str) -> FileMetadata:

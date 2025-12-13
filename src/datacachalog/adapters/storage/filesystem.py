@@ -67,12 +67,15 @@ class FilesystemStorage:
                 bytes_copied += len(chunk)
                 progress(bytes_copied, total_size)
 
-    def upload(self, local: Path, dest: str) -> None:
-        """Copy a local file to destination path.
+    def upload(
+        self, local: Path, dest: str, progress: ProgressCallback | None = None
+    ) -> None:
+        """Copy a local file to destination path with optional progress reporting.
 
         Args:
             local: Path to local file.
             dest: Destination path string.
+            progress: Optional callback function(bytes_uploaded, total_bytes).
 
         Raises:
             FileNotFoundError: If local file does not exist.
@@ -80,6 +83,12 @@ class FilesystemStorage:
         dest_path = Path(dest)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
+        total_size = local.stat().st_size
+        bytes_uploaded = 0
+
         with local.open("rb") as src, dest_path.open("wb") as dst:
             for chunk in iter(lambda: src.read(_CHUNK_SIZE), b""):
                 dst.write(chunk)
+                bytes_uploaded += len(chunk)
+                if progress:
+                    progress(bytes_uploaded, total_size)

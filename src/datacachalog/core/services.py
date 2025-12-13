@@ -160,7 +160,12 @@ class Catalog:
         """
         self._cache.invalidate(name)
 
-    def push(self, name: str, local_path: Path) -> None:
+    def push(
+        self,
+        name: str,
+        local_path: Path,
+        progress: ProgressReporter | None = None,
+    ) -> None:
         """Upload a local file to a dataset's remote source.
 
         After uploading, updates the cache with the new file and metadata
@@ -169,13 +174,23 @@ class Catalog:
         Args:
             name: The dataset name.
             local_path: Path to local file to upload.
+            progress: Optional progress reporter for upload feedback.
 
         Raises:
             KeyError: If no dataset with that name exists.
             FileNotFoundError: If local_path does not exist.
         """
+        if progress is None:
+            progress = NullProgressReporter()
+
         dataset = self.get_dataset(name)
-        self._storage.upload(local_path, dataset.source)
+        total_size = local_path.stat().st_size
+
+        callback = progress.start_task(name, total_size)
+        try:
+            self._storage.upload(local_path, dataset.source, callback)
+        finally:
+            progress.finish_task(name)
 
         # Update cache with new remote metadata
         remote_meta = self._storage.head(dataset.source)

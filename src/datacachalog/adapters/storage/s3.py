@@ -81,18 +81,34 @@ class S3Storage:
                 bytes_downloaded += len(chunk)
                 progress(bytes_downloaded, total_size)
 
-    def upload(self, local: Path, dest: str) -> None:
-        """Upload a local file to S3.
+    def upload(
+        self, local: Path, dest: str, progress: ProgressCallback | None = None
+    ) -> None:
+        """Upload a local file to S3 with optional progress reporting.
 
         Args:
             local: Path to local file.
             dest: S3 URI (s3://bucket/key).
+            progress: Optional callback function(bytes_uploaded, total_bytes).
 
         Raises:
             FileNotFoundError: If local file does not exist.
         """
         bucket, key = self._parse_s3_uri(dest)
-        self._client.upload_file(str(local), bucket, key)
+        total_size = local.stat().st_size
+        bytes_uploaded = 0
+
+        # Read file in chunks, tracking progress
+        chunks: list[bytes] = []
+        with local.open("rb") as f:
+            for chunk in iter(lambda: f.read(_CHUNK_SIZE), b""):
+                chunks.append(chunk)
+                bytes_uploaded += len(chunk)
+                if progress:
+                    progress(bytes_uploaded, total_size)
+
+        # Upload complete file
+        self._client.put_object(Bucket=bucket, Key=key, Body=b"".join(chunks))
 
     def _parse_s3_uri(self, uri: str) -> tuple[str, str]:
         """Parse an S3 URI into bucket and key.
