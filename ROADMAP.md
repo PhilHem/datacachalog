@@ -7,9 +7,10 @@
 - [x] Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
 - [x] Port definitions: `StoragePort`, `CachePort`
 - [x] Filesystem storage adapter (for local dev/testing)
-- [ ] Export `FilesystemStorage` from package `__init__.py`
-- [ ] File cache adapter with JSON metadata sidecar
-- [ ] Basic `Catalog` class with `fetch()` returning `Path`
+- [x] Export `FilesystemStorage` from package `__init__.py`
+- [x] File cache adapter with JSON metadata sidecar
+- [x] Basic `Catalog` class with `fetch()` returning `Path`
+- [ ] `catalog.datasets` property to list registered datasets
 
 ## Phase 2: S3 Integration
 

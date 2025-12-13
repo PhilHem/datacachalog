@@ -13,8 +13,11 @@ Example:
     >>> path = catalog.fetch("customers")  # Downloads if stale
 """
 
+from datacachalog.adapters.cache import FileCache
+from datacachalog.adapters.storage import FilesystemStorage
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
 from datacachalog.core.ports import CachePort, ProgressCallback, StoragePort
+from datacachalog.core.services import Catalog
 
 
 __version__ = "0.1.1"
@@ -22,8 +25,11 @@ __version__ = "0.1.1"
 __all__ = [
     "CacheMetadata",
     "CachePort",
+    "Catalog",
     "Dataset",
+    "FileCache",
     "FileMetadata",
+    "FilesystemStorage",
     "ProgressCallback",
     "StoragePort",
     "__version__",

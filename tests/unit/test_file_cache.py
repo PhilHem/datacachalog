@@ -1,0 +1,127 @@
+"""Unit tests for FileCache adapter."""
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+from datacachalog.core.models import CacheMetadata
+
+
+@pytest.mark.cache
+class TestGet:
+    """Tests for get() method."""
+
+    def test_get_nonexistent_key_returns_none(self, tmp_path: Path) -> None:
+        """get() should return None for keys not in cache."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        assert cache.get("missing") is None
+
+    def test_get_returns_none_when_metadata_missing(self, tmp_path: Path) -> None:
+        """get() should return None when file exists but metadata is missing."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        # Create orphan file without metadata sidecar
+        (tmp_path / "orphan").write_text("data")
+        assert cache.get("orphan") is None
+
+
+@pytest.mark.cache
+class TestPut:
+    """Tests for put() method."""
+
+    def test_put_then_get_returns_path_and_metadata(self, tmp_path: Path) -> None:
+        """put() should store file and metadata, get() should retrieve them."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        meta = CacheMetadata(etag='"abc123"', last_modified=datetime.now(UTC))
+        cache.put("mykey", source, meta)
+
+        result = cache.get("mykey")
+        assert result is not None
+        path, retrieved_meta = result
+        assert path.read_text() == "data"
+        assert retrieved_meta.etag == '"abc123"'
+
+    def test_put_preserves_all_metadata_fields(self, tmp_path: Path) -> None:
+        """put() should preserve all CacheMetadata fields in the sidecar."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        now = datetime.now(UTC)
+        meta = CacheMetadata(
+            etag='"abc"',
+            last_modified=now,
+            cached_at=now,
+            source="s3://bucket/file.txt",
+        )
+        cache.put("key", source, meta)
+
+        result = cache.get("key")
+        assert result is not None
+        _, retrieved = result
+        assert retrieved.etag == '"abc"'
+        assert retrieved.last_modified == now
+        assert retrieved.source == "s3://bucket/file.txt"
+
+    def test_put_creates_cache_directory(self, tmp_path: Path) -> None:
+        """put() should create cache directory if it doesn't exist."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path / "nested" / "cache")
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("mykey", source, CacheMetadata(etag='"x"'))
+
+        assert cache.get("mykey") is not None
+
+
+@pytest.mark.cache
+class TestInvalidate:
+    """Tests for invalidate() method."""
+
+    def test_invalidate_removes_cached_file_and_metadata(self, tmp_path: Path) -> None:
+        """invalidate() should remove both cached file and metadata sidecar."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+        cache.put("mykey", source, CacheMetadata(etag='"x"'))
+
+        cache.invalidate("mykey")
+
+        assert cache.get("mykey") is None
+        assert not (tmp_path / "mykey").exists()
+        assert not (tmp_path / "mykey.meta.json").exists()
+
+    def test_invalidate_nonexistent_key_does_not_raise(self, tmp_path: Path) -> None:
+        """invalidate() should not raise for keys not in cache."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        cache.invalidate("never_existed")  # Should not raise
+
+
+@pytest.mark.cache
+class TestProtocolConformance:
+    """Tests for CachePort protocol conformance."""
+
+    def test_file_cache_satisfies_cache_port_protocol(self, tmp_path: Path) -> None:
+        """FileCache should satisfy CachePort protocol."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.ports import CachePort
+
+        cache = FileCache(cache_dir=tmp_path)
+        assert isinstance(cache, CachePort)
