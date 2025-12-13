@@ -32,9 +32,9 @@
 
 ## Phase 4: Write Support
 
-- [ ] `catalog.push(name, local_path)` implementation
+- [x] `catalog.push(name, local_path)` implementation
 - [ ] Upload to S3 with progress
-- [ ] Cache update after push
+- [x] Cache update after push
 
 ## Phase 5: Polish
 

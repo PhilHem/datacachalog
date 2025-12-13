@@ -160,6 +160,32 @@ class Catalog:
         """
         self._cache.invalidate(name)
 
+    def push(self, name: str, local_path: Path) -> None:
+        """Upload a local file to a dataset's remote source.
+
+        After uploading, updates the cache with the new file and metadata
+        so subsequent fetch() calls return the pushed file without re-download.
+
+        Args:
+            name: The dataset name.
+            local_path: Path to local file to upload.
+
+        Raises:
+            KeyError: If no dataset with that name exists.
+            FileNotFoundError: If local_path does not exist.
+        """
+        dataset = self.get_dataset(name)
+        self._storage.upload(local_path, dataset.source)
+
+        # Update cache with new remote metadata
+        remote_meta = self._storage.head(dataset.source)
+        cache_meta = CacheMetadata(
+            etag=remote_meta.etag,
+            last_modified=remote_meta.last_modified,
+            source=dataset.source,
+        )
+        self._cache.put(name, local_path, cache_meta)
+
     def fetch_all(
         self,
         progress: ProgressReporter | None = None,
