@@ -21,6 +21,11 @@ class Catalog:
         self._cache = cache
         self._cache_dir = cache_dir
 
+    @property
+    def datasets(self) -> list[Dataset]:
+        """List all registered datasets."""
+        return list(self._datasets.values())
+
     def get_dataset(self, name: str) -> Dataset:
         """Look up a dataset by name.
 

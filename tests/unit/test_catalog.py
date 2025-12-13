@@ -232,3 +232,45 @@ class TestFetch:
         # The download should go to the explicit cache_path location
         assert custom_path.exists()
         assert custom_path.read_text() == "data"
+
+
+@pytest.mark.core
+class TestDatasetsProperty:
+    """Tests for the catalog.datasets property."""
+
+    def test_datasets_returns_all_registered_datasets(self, tmp_path: Path) -> None:
+        """datasets property should return all registered datasets."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Arrange
+        ds1 = Dataset(name="alpha", source=str(tmp_path / "a.csv"))
+        ds2 = Dataset(name="beta", source=str(tmp_path / "b.csv"))
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=tmp_path / "cache")
+        catalog = Catalog(datasets=[ds1, ds2], storage=storage, cache=cache)
+
+        # Act
+        result = catalog.datasets
+
+        # Assert
+        assert len(result) == 2
+        assert {d.name for d in result} == {"alpha", "beta"}
+
+    def test_datasets_returns_empty_list_when_no_datasets(self, tmp_path: Path) -> None:
+        """datasets property should return empty list when catalog has no datasets."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Arrange
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=tmp_path / "cache")
+        catalog = Catalog(datasets=[], storage=storage, cache=cache)
+
+        # Act
+        result = catalog.datasets
+
+        # Assert
+        assert result == []

@@ -10,7 +10,7 @@
 - [x] Export `FilesystemStorage` from package `__init__.py`
 - [x] File cache adapter with JSON metadata sidecar
 - [x] Basic `Catalog` class with `fetch()` returning `Path`
-- [ ] `catalog.datasets` property to list registered datasets
+- [x] `catalog.datasets` property to list registered datasets
 
 ## Phase 2: S3 Integration
 
