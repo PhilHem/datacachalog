@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from datacachalog.core.exceptions import ConfigurationError, DatasetNotFoundError
 from datacachalog.core.models import CacheMetadata, Dataset
 from datacachalog.core.ports import (
     CachePort,
@@ -42,9 +43,14 @@ class Catalog:
             The Dataset with the matching name.
 
         Raises:
-            KeyError: If no dataset with that name exists.
+            DatasetNotFoundError: If no dataset with that name exists.
         """
-        return self._datasets[name]
+        try:
+            return self._datasets[name]
+        except KeyError:
+            raise DatasetNotFoundError(
+                name, available=list(self._datasets.keys())
+            ) from None
 
     def _resolve_cache_path(self, dataset: Dataset) -> Path:
         """Resolve the local cache path for a dataset.
@@ -55,7 +61,7 @@ class Catalog:
             return dataset.cache_path
 
         if self._cache_dir is None:
-            raise ValueError(
+            raise ConfigurationError(
                 f"Dataset '{dataset.name}' has no cache_path and no cache_dir configured"
             )
 
@@ -89,7 +95,7 @@ class Catalog:
             Path to the local cached file.
 
         Raises:
-            KeyError: If no dataset with that name exists.
+            DatasetNotFoundError: If no dataset with that name exists.
         """
         if progress is None:
             progress = NullProgressReporter()
@@ -142,7 +148,7 @@ class Catalog:
             True if not cached or if remote has changed since caching.
 
         Raises:
-            KeyError: If no dataset with that name exists.
+            DatasetNotFoundError: If no dataset with that name exists.
         """
         dataset = self.get_dataset(name)
         cached = self._cache.get(name)
@@ -177,7 +183,7 @@ class Catalog:
             progress: Optional progress reporter for upload feedback.
 
         Raises:
-            KeyError: If no dataset with that name exists.
+            DatasetNotFoundError: If no dataset with that name exists.
             FileNotFoundError: If local_path does not exist.
         """
         if progress is None:

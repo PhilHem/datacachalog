@@ -44,10 +44,11 @@ class TestGetDataset:
 
         assert catalog.get_dataset("customers") == customers
 
-    def test_get_dataset_raises_key_error_for_unknown(self, tmp_path: Path) -> None:
-        """get_dataset() should raise KeyError for unknown dataset names."""
+    def test_get_dataset_raises_dataset_not_found_error(self, tmp_path: Path) -> None:
+        """get_dataset() should raise DatasetNotFoundError for unknown names."""
         from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import DatasetNotFoundError
         from datacachalog.core.services import Catalog
 
         storage = FilesystemStorage()
@@ -55,8 +56,61 @@ class TestGetDataset:
 
         catalog = Catalog(datasets=[], storage=storage, cache=cache)
 
-        with pytest.raises(KeyError):
+        with pytest.raises(DatasetNotFoundError, match="unknown"):
             catalog.get_dataset("unknown")
+
+    def test_get_dataset_error_includes_available_datasets(
+        self, tmp_path: Path
+    ) -> None:
+        """DatasetNotFoundError should list available dataset names."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import DatasetNotFoundError
+        from datacachalog.core.services import Catalog
+
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=tmp_path / "cache")
+        ds1 = Dataset(name="alpha", source="/a.csv")
+        ds2 = Dataset(name="beta", source="/b.csv")
+
+        catalog = Catalog(datasets=[ds1, ds2], storage=storage, cache=cache)
+
+        with pytest.raises(DatasetNotFoundError) as exc_info:
+            catalog.get_dataset("missing")
+
+        assert "alpha" in exc_info.value.recovery_hint
+        assert "beta" in exc_info.value.recovery_hint
+
+
+@pytest.mark.core
+class TestFetchMissingCacheDir:
+    """Tests for fetch() when cache configuration is missing."""
+
+    def test_fetch_raises_configuration_error_without_cache_path_or_dir(
+        self, tmp_path: Path
+    ) -> None:
+        """fetch() should raise ConfigurationError if neither cache_path nor cache_dir."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import ConfigurationError
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("data")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        # Dataset without explicit cache_path, catalog without cache_dir
+        dataset = Dataset(name="customers", source=str(remote_file))
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+        # Note: no cache_dir passed to Catalog
+
+        with pytest.raises(ConfigurationError, match="cache"):
+            catalog.fetch("customers")
 
 
 @pytest.mark.core

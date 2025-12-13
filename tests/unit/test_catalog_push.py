@@ -115,10 +115,13 @@ class TestPush:
         # Assert: fetch returns the pushed content
         assert path.read_text() == "pushed content"
 
-    def test_push_nonexistent_dataset_raises_keyerror(self, tmp_path: Path) -> None:
-        """push() should raise KeyError for unknown dataset name."""
+    def test_push_nonexistent_dataset_raises_dataset_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """push() should raise DatasetNotFoundError for unknown dataset name."""
         from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import DatasetNotFoundError
         from datacachalog.core.services import Catalog
 
         cache_dir = tmp_path / "cache"
@@ -130,7 +133,7 @@ class TestPush:
         local_file = tmp_path / "file.csv"
         local_file.write_text("content")
 
-        with pytest.raises(KeyError):
+        with pytest.raises(DatasetNotFoundError, match="unknown"):
             catalog.push("unknown", local_file)
 
     def test_push_nonexistent_file_raises_filenotfounderror(

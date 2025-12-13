@@ -4,6 +4,7 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
+from datacachalog.core.exceptions import StorageNotFoundError
 from datacachalog.core.models import FileMetadata
 from datacachalog.core.ports import ProgressCallback
 
@@ -29,10 +30,17 @@ class FilesystemStorage:
             FileMetadata with etag (MD5 hash), last_modified, and size.
 
         Raises:
-            FileNotFoundError: If file does not exist.
+            StorageNotFoundError: If file does not exist.
         """
         path = Path(source)
-        stat = path.stat()
+        try:
+            stat = path.stat()
+        except FileNotFoundError as e:
+            raise StorageNotFoundError(
+                f"File not found: {source}",
+                source=source,
+                cause=e,
+            ) from e
 
         # Compute MD5 hash for ETag (matches S3 behavior for non-multipart)
         md5_hash = hashlib.md5()
@@ -55,10 +63,18 @@ class FilesystemStorage:
             progress: Callback function(bytes_downloaded, total_bytes).
 
         Raises:
-            FileNotFoundError: If source file does not exist.
+            StorageNotFoundError: If source file does not exist.
         """
         source_path = Path(source)
-        total_size = source_path.stat().st_size
+        try:
+            total_size = source_path.stat().st_size
+        except FileNotFoundError as e:
+            raise StorageNotFoundError(
+                f"File not found: {source}",
+                source=source,
+                cause=e,
+            ) from e
+
         bytes_copied = 0
 
         with source_path.open("rb") as src, dest.open("wb") as dst:

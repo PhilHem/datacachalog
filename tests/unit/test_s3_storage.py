@@ -55,18 +55,18 @@ class TestHead:
         assert metadata.etag.startswith('"')
         assert metadata.etag.endswith('"')
 
-    def test_head_missing_key_raises(self, s3_client) -> None:
-        """head() should raise ClientError for missing keys."""
-        from botocore.exceptions import ClientError
-
+    def test_head_missing_key_raises_storage_not_found(self, s3_client) -> None:
+        """head() should raise StorageNotFoundError for missing keys."""
         from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.exceptions import StorageNotFoundError
 
         storage = S3Storage(client=s3_client)
 
-        with pytest.raises(ClientError) as exc_info:
+        with pytest.raises(StorageNotFoundError) as exc_info:
             storage.head("s3://test-bucket/nonexistent.txt")
 
-        assert exc_info.value.response["Error"]["Code"] == "404"
+        assert "nonexistent.txt" in exc_info.value.source
+        assert exc_info.value.recovery_hint is not None
 
 
 @pytest.mark.storage
@@ -108,21 +108,22 @@ class TestDownload:
         assert progress_calls[-1][0] == 1000
         assert progress_calls[-1][1] == 1000
 
-    def test_download_missing_key_raises(self, s3_client, tmp_path: Path) -> None:
-        """download() should raise ClientError for missing keys."""
-        from botocore.exceptions import ClientError
-
+    def test_download_missing_key_raises_storage_not_found(
+        self, s3_client, tmp_path: Path
+    ) -> None:
+        """download() should raise StorageNotFoundError for missing keys."""
         from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.exceptions import StorageNotFoundError
 
         dest = tmp_path / "downloaded.txt"
         storage = S3Storage(client=s3_client)
 
-        with pytest.raises(ClientError) as exc_info:
+        with pytest.raises(StorageNotFoundError) as exc_info:
             storage.download(
                 "s3://test-bucket/nonexistent.txt", dest, progress=lambda x, y: None
             )
 
-        assert exc_info.value.response["Error"]["Code"] == "NoSuchKey"
+        assert "nonexistent.txt" in exc_info.value.source
 
 
 @pytest.mark.storage

@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path  # noqa: TC003 - used at runtime, not just type hints
 
+from datacachalog.core.exceptions import CacheCorruptError
 from datacachalog.core.models import CacheMetadata
 
 
@@ -44,6 +45,9 @@ class FileCache:
 
         Returns:
             Tuple of (file path, metadata) if cached, None otherwise.
+
+        Raises:
+            CacheCorruptError: If metadata file exists but is corrupt/unreadable.
         """
         file_path = self._file_path(key)
         meta_path = self._meta_path(key)
@@ -51,8 +55,16 @@ class FileCache:
         if not file_path.exists() or not meta_path.exists():
             return None
 
-        with meta_path.open() as f:
-            data = json.load(f)
+        try:
+            with meta_path.open() as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise CacheCorruptError(
+                f"Cache metadata corrupt for '{key}'",
+                key=key,
+                path=meta_path,
+                cause=e,
+            ) from e
 
         metadata = CacheMetadata(
             etag=data.get("etag"),

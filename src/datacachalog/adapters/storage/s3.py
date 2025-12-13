@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import boto3
+from botocore.exceptions import ClientError
 
+from datacachalog.core.exceptions import (
+    StorageAccessError,
+    StorageError,
+    StorageNotFoundError,
+)
 from datacachalog.core.models import FileMetadata
 
 
@@ -45,10 +51,15 @@ class S3Storage:
             FileMetadata with etag, last_modified, and size.
 
         Raises:
-            botocore.exceptions.ClientError: If object does not exist.
+            StorageNotFoundError: If object does not exist.
+            StorageAccessError: If access is denied.
+            StorageError: For other S3 errors.
         """
         bucket, key = self._parse_s3_uri(source)
-        response = self._client.head_object(Bucket=bucket, Key=key)
+        try:
+            response = self._client.head_object(Bucket=bucket, Key=key)
+        except ClientError as e:
+            raise self._translate_client_error(e, source) from e
 
         return FileMetadata(
             etag=response["ETag"],
@@ -65,12 +76,18 @@ class S3Storage:
             progress: Callback function(bytes_downloaded, total_bytes).
 
         Raises:
-            botocore.exceptions.ClientError: If object does not exist.
+            StorageNotFoundError: If object does not exist.
+            StorageAccessError: If access is denied.
+            StorageError: For other S3 errors.
         """
         bucket, key = self._parse_s3_uri(source)
 
-        # Get object with streaming body
-        response = self._client.get_object(Bucket=bucket, Key=key)
+        try:
+            # Get object with streaming body
+            response = self._client.get_object(Bucket=bucket, Key=key)
+        except ClientError as e:
+            raise self._translate_client_error(e, source) from e
+
         total_size = response["ContentLength"]
         body = response["Body"]
 
@@ -135,3 +152,38 @@ class S3Storage:
 
         bucket, key = parts
         return bucket, key
+
+    def _translate_client_error(self, error: ClientError, source: str) -> StorageError:
+        """Translate botocore ClientError to domain exception.
+
+        Args:
+            error: The botocore ClientError.
+            source: The source URI for context.
+
+        Returns:
+            Appropriate StorageError subclass.
+        """
+        code = error.response.get("Error", {}).get("Code", "")
+
+        # Not found errors
+        if code in ("404", "NoSuchKey", "NoSuchBucket"):
+            return StorageNotFoundError(
+                f"Object not found: {source}",
+                source=source,
+                cause=error,
+            )
+
+        # Access denied errors
+        if code in ("403", "AccessDenied"):
+            return StorageAccessError(
+                f"Access denied: {source}",
+                source=source,
+                cause=error,
+            )
+
+        # Generic S3 error
+        return StorageError(
+            f"S3 error ({code}): {error}",
+            source=source,
+            cause=error,
+        )

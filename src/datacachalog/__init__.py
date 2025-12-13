@@ -20,6 +20,16 @@ from datacachalog.adapters.storage import (
     S3Storage,
     create_router,
 )
+from datacachalog.core.exceptions import (
+    CacheCorruptError,
+    CacheError,
+    ConfigurationError,
+    DatacachalogError,
+    DatasetNotFoundError,
+    StorageAccessError,
+    StorageError,
+    StorageNotFoundError,
+)
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
 from datacachalog.core.ports import (
     CachePort,
@@ -34,10 +44,15 @@ from datacachalog.core.services import Catalog
 __version__ = "0.2.0"
 
 __all__ = [
+    "CacheCorruptError",
+    "CacheError",
     "CacheMetadata",
     "CachePort",
     "Catalog",
+    "ConfigurationError",
+    "DatacachalogError",
     "Dataset",
+    "DatasetNotFoundError",
     "FileCache",
     "FileMetadata",
     "FilesystemStorage",
@@ -46,6 +61,9 @@ __all__ = [
     "ProgressReporter",
     "RouterStorage",
     "S3Storage",
+    "StorageAccessError",
+    "StorageError",
+    "StorageNotFoundError",
     "StoragePort",
     "__version__",
     "create_router",

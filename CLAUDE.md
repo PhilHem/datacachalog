@@ -107,12 +107,44 @@ class CachePort(Protocol):
 - **Storage**: `s3.py`, `filesystem.py`
 - **Cache**: `file_cache.py` (stores files + metadata JSON sidecar)
 
+### Exception Handling
+
+Domain exceptions live in `core/exceptions.py`. All inherit from `DatacachalogError`:
+
+- **Adapters translate errors**: S3 `ClientError` → `StorageNotFoundError`, etc.
+- **Core never catches adapter exceptions**: The port boundary is where translation happens
+- **`recovery_hint` property**: Each exception provides actionable guidance
+- **`ValueError` for programmer errors**: Invalid URIs, unknown schemes stay as `ValueError`
+
+```python
+try:
+    path = catalog.fetch("customers")
+except DatasetNotFoundError as e:
+    print(e.recovery_hint)  # "Available datasets: orders, products"
+except StorageNotFoundError as e:
+    print(e.recovery_hint)  # "Verify the source path exists: s3://..."
+except DatacachalogError:
+    # Catch-all for any library error
+    pass
+```
+
+Exception hierarchy:
+- `DatacachalogError` - base for all library errors
+  - `DatasetNotFoundError` - dataset name not in catalog
+  - `StorageError` - base for storage errors
+    - `StorageNotFoundError` - file/object doesn't exist
+    - `StorageAccessError` - permission denied
+  - `CacheError` - base for cache errors
+    - `CacheCorruptError` - metadata JSON unreadable
+  - `ConfigurationError` - missing required config
+
 ## Folder Structure
 
 ```
 src/datacachalog/
 ├── __init__.py          # Re-exports: Dataset, Catalog
 ├── core/
+│   ├── exceptions.py    # Domain exceptions with recovery hints
 │   ├── models.py        # Dataset, CacheMetadata, FileMetadata
 │   ├── services.py      # Catalog orchestration logic
 │   └── ports.py         # StoragePort, CachePort protocols

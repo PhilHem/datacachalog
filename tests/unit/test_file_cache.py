@@ -125,3 +125,25 @@ class TestProtocolConformance:
 
         cache = FileCache(cache_dir=tmp_path)
         assert isinstance(cache, CachePort)
+
+
+@pytest.mark.cache
+class TestCorruptMetadata:
+    """Tests for handling corrupt cache metadata."""
+
+    def test_get_raises_cache_corrupt_for_invalid_json(self, tmp_path: Path) -> None:
+        """get() should raise CacheCorruptError when metadata is invalid JSON."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import CacheCorruptError
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        # Create file and corrupt metadata
+        (tmp_path / "mykey").write_text("data")
+        (tmp_path / "mykey.meta.json").write_text("not valid json{{{")
+
+        with pytest.raises(CacheCorruptError) as exc_info:
+            cache.get("mykey")
+
+        assert exc_info.value.key == "mykey"
+        assert exc_info.value.recovery_hint is not None

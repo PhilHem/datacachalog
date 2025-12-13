@@ -48,14 +48,18 @@ class TestHead:
         # S3 ETags are quoted
         assert metadata.etag == f'"{expected_md5}"'
 
-    def test_head_file_not_found(self, tmp_path: Path) -> None:
-        """head() should raise FileNotFoundError for missing files."""
+    def test_head_file_not_found_raises_storage_not_found(self, tmp_path: Path) -> None:
+        """head() should raise StorageNotFoundError for missing files."""
         from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import StorageNotFoundError
 
         storage = FilesystemStorage()
 
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(StorageNotFoundError) as exc_info:
             storage.head(str(tmp_path / "nonexistent.txt"))
+
+        assert "nonexistent.txt" in exc_info.value.source
+        assert exc_info.value.recovery_hint is not None
 
 
 @pytest.mark.storage
@@ -99,18 +103,23 @@ class TestDownload:
         assert progress_calls[-1][0] == 1000
         assert progress_calls[-1][1] == 1000
 
-    def test_download_source_not_found(self, tmp_path: Path) -> None:
-        """download() should raise FileNotFoundError for missing source."""
+    def test_download_source_not_found_raises_storage_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """download() should raise StorageNotFoundError for missing source."""
         from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import StorageNotFoundError
 
         dest = tmp_path / "dest.txt"
 
         storage = FilesystemStorage()
 
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(StorageNotFoundError) as exc_info:
             storage.download(
                 str(tmp_path / "nonexistent.txt"), dest, progress=lambda x, y: None
             )
+
+        assert "nonexistent.txt" in exc_info.value.source
 
 
 @pytest.mark.storage
