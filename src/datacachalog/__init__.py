@@ -21,7 +21,13 @@ from datacachalog.adapters.storage import (
     create_router,
 )
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
-from datacachalog.core.ports import CachePort, ProgressCallback, StoragePort
+from datacachalog.core.ports import (
+    CachePort,
+    NullProgressReporter,
+    ProgressCallback,
+    ProgressReporter,
+    StoragePort,
+)
 from datacachalog.core.services import Catalog
 
 
@@ -35,7 +41,9 @@ __all__ = [
     "FileCache",
     "FileMetadata",
     "FilesystemStorage",
+    "NullProgressReporter",
     "ProgressCallback",
+    "ProgressReporter",
     "RouterStorage",
     "S3Storage",
     "StoragePort",

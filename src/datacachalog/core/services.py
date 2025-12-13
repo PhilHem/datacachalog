@@ -1,9 +1,15 @@
 """Core domain services for datacachalog."""
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from datacachalog.core.models import CacheMetadata, Dataset
-from datacachalog.core.ports import CachePort, StoragePort
+from datacachalog.core.ports import (
+    CachePort,
+    NullProgressReporter,
+    ProgressReporter,
+    StoragePort,
+)
 
 
 class Catalog:
@@ -68,11 +74,16 @@ class Catalog:
 
         return self._cache_dir / filename
 
-    def fetch(self, name: str) -> Path:
+    def fetch(
+        self,
+        name: str,
+        progress: ProgressReporter | None = None,
+    ) -> Path:
         """Fetch a dataset, downloading if not cached or stale.
 
         Args:
             name: The dataset name.
+            progress: Optional progress reporter for download feedback.
 
         Returns:
             Path to the local cached file.
@@ -80,6 +91,9 @@ class Catalog:
         Raises:
             KeyError: If no dataset with that name exists.
         """
+        if progress is None:
+            progress = NullProgressReporter()
+
         dataset = self.get_dataset(name)
 
         # Check cache
@@ -90,12 +104,18 @@ class Catalog:
             if not cache_meta.is_stale(remote_meta):
                 return cached_path
 
-        # Cache miss or stale - download
+        # Cache miss or stale - download with progress
         dest = self._resolve_cache_path(dataset)
-
         dest.parent.mkdir(parents=True, exist_ok=True)
+
         remote_meta = self._storage.head(dataset.source)
-        self._storage.download(dataset.source, dest, lambda _downloaded, _total: None)
+        total_size = remote_meta.size or 0
+
+        callback = progress.start_task(name, total_size)
+        try:
+            self._storage.download(dataset.source, dest, callback)
+        finally:
+            progress.finish_task(name)
 
         # Store in cache with metadata
         cache_meta = CacheMetadata(
@@ -139,3 +159,48 @@ class Catalog:
             name: The dataset name.
         """
         self._cache.invalidate(name)
+
+    def fetch_all(
+        self,
+        progress: ProgressReporter | None = None,
+        max_workers: int | None = None,
+    ) -> dict[str, Path]:
+        """Fetch all datasets, downloading any that are stale.
+
+        Downloads are performed in parallel when max_workers > 1.
+
+        Args:
+            progress: Optional progress reporter for download feedback.
+            max_workers: Maximum parallel downloads. None uses ThreadPoolExecutor
+                default. Use 1 for sequential downloads.
+
+        Returns:
+            Dict mapping dataset names to their local cached paths.
+        """
+        if progress is None:
+            progress = NullProgressReporter()
+
+        datasets = list(self._datasets.values())
+        if not datasets:
+            return {}
+
+        results: dict[str, Path] = {}
+
+        # Sequential execution for max_workers=1
+        if max_workers == 1:
+            for dataset in datasets:
+                results[dataset.name] = self.fetch(dataset.name, progress=progress)
+            return results
+
+        # Parallel execution
+        def fetch_one(dataset: Dataset) -> tuple[str, Path]:
+            path = self.fetch(dataset.name, progress=progress)
+            return dataset.name, path
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(fetch_one, ds) for ds in datasets]
+            for future in futures:
+                name, path = future.result()
+                results[name] = path
+
+        return results

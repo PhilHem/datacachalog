@@ -112,3 +112,81 @@ def test_ports_exported_from_package():
     assert StoragePort is not None
     assert CachePort is not None
     assert ProgressCallback is not None
+
+
+@pytest.mark.core
+class TestProgressReporterProtocol:
+    """Tests for ProgressReporter protocol definition."""
+
+    def test_progress_reporter_protocol_exists(self) -> None:
+        """ProgressReporter should be importable from core.ports."""
+        from datacachalog.core.ports import ProgressReporter
+
+        assert ProgressReporter is not None
+
+    def test_progress_reporter_is_runtime_checkable(self) -> None:
+        """ProgressReporter should support isinstance checks."""
+        from datacachalog.core.ports import ProgressCallback, ProgressReporter
+
+        class DummyReporter:
+            def start_task(self, name: str, total: int) -> ProgressCallback:
+                return lambda downloaded, total: None
+
+            def finish_task(self, name: str) -> None:
+                pass
+
+        assert isinstance(DummyReporter(), ProgressReporter)
+
+    def test_start_task_returns_progress_callback(self) -> None:
+        """start_task() should return a ProgressCallback."""
+        from datacachalog.core.ports import ProgressCallback, ProgressReporter
+
+        class DummyReporter:
+            def start_task(self, name: str, total: int) -> ProgressCallback:
+                return lambda downloaded, total: None
+
+            def finish_task(self, name: str) -> None:
+                pass
+
+        reporter: ProgressReporter = DummyReporter()
+        callback = reporter.start_task("test", 1000)
+        # Verify it's callable with (int, int)
+        callback(500, 1000)  # Should not raise
+
+
+@pytest.mark.core
+class TestNullProgressReporter:
+    """Tests for NullProgressReporter."""
+
+    def test_null_reporter_exists(self) -> None:
+        """NullProgressReporter should be importable from core.ports."""
+        from datacachalog.core.ports import NullProgressReporter
+
+        reporter = NullProgressReporter()
+        assert reporter is not None
+
+    def test_null_reporter_satisfies_protocol(self) -> None:
+        """NullProgressReporter should implement ProgressReporter."""
+        from datacachalog.core.ports import NullProgressReporter, ProgressReporter
+
+        reporter = NullProgressReporter()
+        assert isinstance(reporter, ProgressReporter)
+
+    def test_start_task_returns_noop_callback(self) -> None:
+        """start_task() should return a callable that does nothing."""
+        from datacachalog.core.ports import NullProgressReporter
+
+        reporter = NullProgressReporter()
+        callback = reporter.start_task("test", 1000)
+
+        # Should not raise
+        callback(100, 1000)
+        callback(500, 1000)
+        callback(1000, 1000)
+
+    def test_finish_task_is_noop(self) -> None:
+        """finish_task() should do nothing without error."""
+        from datacachalog.core.ports import NullProgressReporter
+
+        reporter = NullProgressReporter()
+        reporter.finish_task("test")  # Should not raise
