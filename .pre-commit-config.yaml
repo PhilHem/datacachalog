@@ -1,0 +1,50 @@
+# Pre-commit hooks mirror the CI pipeline to catch issues early.
+# Install: uv run pre-commit install
+# Run manually: uv run pre-commit run --all-files
+
+default_language_version:
+  python: python3
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: debug-statements
+
+  # Ruff linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.9
+    hooks:
+      # Run linter first (with auto-fix)
+      - id: ruff-check
+        args: [--fix]
+      # Then run formatter
+      - id: ruff-format
+
+  # Type checking with mypy
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [src/datacachalog/]
+
+  # Run tests
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [-x, --tb=short]
