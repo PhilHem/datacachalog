@@ -80,10 +80,12 @@ class RouterStorage:
         backend, path = self._get_backend_and_path(source)
         backend.download(path, dest, progress)
 
-    def upload(self, local: Path, dest: str) -> None:
+    def upload(
+        self, local: Path, dest: str, progress: ProgressCallback | None = None
+    ) -> None:
         """Upload file by delegating to appropriate backend."""
         backend, path = self._get_backend_and_path(dest)
-        backend.upload(local, path)
+        backend.upload(local, path, progress)
 
 
 def create_router(s3_client: Any | None = None) -> RouterStorage:

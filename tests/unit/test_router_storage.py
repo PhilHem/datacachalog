@@ -150,7 +150,7 @@ class TestRouterStorageUpload:
 
         router.upload(local, "s3://bucket/key.csv")
 
-        mock_s3.upload.assert_called_once_with(local, "s3://bucket/key.csv")
+        mock_s3.upload.assert_called_once_with(local, "s3://bucket/key.csv", None)
 
 
 @pytest.mark.storage

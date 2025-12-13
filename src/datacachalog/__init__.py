@@ -39,6 +39,7 @@ from datacachalog.core.ports import (
     StoragePort,
 )
 from datacachalog.core.services import Catalog
+from datacachalog.progress import RichProgressReporter
 
 
 __version__ = "0.2.0"
@@ -59,6 +60,7 @@ __all__ = [
     "NullProgressReporter",
     "ProgressCallback",
     "ProgressReporter",
+    "RichProgressReporter",
     "RouterStorage",
     "S3Storage",
     "StorageAccessError",

@@ -39,7 +39,7 @@
 ## Phase 5: Polish
 
 - [x] Error handling and meaningful exceptions
-- [ ] Documentation and examples
+- [x] Documentation and examples
 
 ## Future
 
