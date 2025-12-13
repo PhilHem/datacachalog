@@ -14,10 +14,12 @@
 
 ## Phase 2: S3 Integration
 
-- [ ] S3 storage adapter using boto3
+- [x] S3 storage adapter using boto3
+- [x] `head()` operation for metadata without download
 - [ ] ETag/LastModified staleness detection
 - [ ] Integration tests with moto or localstack
-- [ ] `head()` operation for metadata without download
+- [ ] S3 URI scheme validation in Catalog (route `s3://` to S3Storage)
+- [ ] Export S3Storage from package root `__init__.py`
 
 ## Phase 3: Progress & Parallelism
 
