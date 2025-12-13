@@ -235,6 +235,172 @@ class TestFetch:
 
 
 @pytest.mark.core
+class TestIsStale:
+    """Tests for is_stale() method."""
+
+    def test_is_stale_returns_true_when_not_cached(self, tmp_path: Path) -> None:
+        """is_stale() should return True when dataset not in cache."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create "remote" file but don't fetch
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Assert: not cached = stale
+        assert catalog.is_stale("customers") is True
+
+    def test_is_stale_returns_false_when_fresh(self, tmp_path: Path) -> None:
+        """is_stale() should return False when cache matches remote."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache
+        catalog.fetch("customers")
+
+        # Assert: remote unchanged = fresh
+        assert catalog.is_stale("customers") is False
+
+    def test_is_stale_returns_true_when_remote_changed(self, tmp_path: Path) -> None:
+        """is_stale() should return True when remote has changed."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache
+        catalog.fetch("customers")
+
+        # Modify remote (changes ETag)
+        remote_file.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        # Assert: remote changed = stale
+        assert catalog.is_stale("customers") is True
+
+
+@pytest.mark.core
+class TestInvalidate:
+    """Tests for invalidate() method."""
+
+    def test_invalidate_removes_from_cache(self, tmp_path: Path) -> None:
+        """invalidate() should remove dataset from cache."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache
+        catalog.fetch("customers")
+        assert catalog.is_stale("customers") is False
+
+        # Invalidate
+        catalog.invalidate("customers")
+
+        # Assert: now stale (not in cache)
+        assert catalog.is_stale("customers") is True
+
+    def test_invalidate_causes_redownload_on_next_fetch(self, tmp_path: Path) -> None:
+        """invalidate() should cause next fetch to re-download."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch and modify cached file
+        path = catalog.fetch("customers")
+        path.write_text("MODIFIED")
+
+        # Invalidate
+        catalog.invalidate("customers")
+
+        # Fetch again - should re-download
+        path2 = catalog.fetch("customers")
+
+        # Assert: content is fresh (not modified)
+        assert path2.read_text() == "id,name\n1,Alice\n"
+
+
+@pytest.mark.core
 class TestDatasetsProperty:
     """Tests for the catalog.datasets property."""
 

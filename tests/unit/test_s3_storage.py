@@ -197,3 +197,14 @@ class TestUriParsing:
         metadata = storage.head("s3://test-bucket/path/to/file.txt")
 
         assert metadata.size == 4
+
+
+@pytest.mark.storage
+class TestPackageExport:
+    """Tests for S3Storage export from package root."""
+
+    def test_s3storage_exported_from_package_root(self) -> None:
+        """S3Storage should be importable from datacachalog."""
+        from datacachalog import S3Storage
+
+        assert S3Storage is not None
