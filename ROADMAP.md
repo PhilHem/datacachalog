@@ -11,6 +11,7 @@
 - [x] File cache adapter with JSON metadata sidecar
 - [x] Basic `Catalog` class with `fetch()` returning `Path`
 - [x] `catalog.datasets` property to list registered datasets
+- [x] Cache path derivation from source (path without bucket, preserves hierarchy)
 
 ## Phase 2: S3 Integration
 
@@ -43,11 +44,12 @@
 
 ## Phase 6: Configuration Ergonomics
 
-- [ ] `Dataset.with_resolved_paths(root)` - resolve relative cache_path against project root
+- [x] `Dataset.with_resolved_paths(root)` - resolve relative cache_path against project root
 - [ ] `Catalog.from_directory()` factory - auto-discover root and create with sensible defaults
 
 ## Future
 
+- Graceful network failure handling (warn and use stale cache if available, raise only if no cache)
 - Glob pattern support for multi-file datasets
 - GCS and Azure Blob storage adapters
 - Optional CLI (`catalog fetch customers`)
@@ -60,26 +62,6 @@
 ## Open Design Questions
 
 Decisions needed before or during implementation:
-
-### Project Root Discovery
-How do we find project root for resolving relative paths?
-- [x] Look for `.git` directory
-- [x] Look for `pyproject.toml`
-- [x] Marker file like `.datacachalog`
-- [ ] ~~Explicit configuration only~~ (supported via `start` parameter)
-
-**Resolved**: Implemented `find_project_root()` in `config.py` with marker priority: `.datacachalog` > `pyproject.toml` > `.git`
-
-### Source Path Derivation
-For `s3://bucket/path/to/file.parquet` with `cache_dir="./data"`, what's the local path?
-- [ ] `./data/file.parquet` (filename only)
-- [ ] `./data/bucket/path/to/file.parquet` (full path with bucket)
-- [ ] `./data/path/to/file.parquet` (path without bucket)
-
-### Network Failure Behavior
-If S3 is unreachable during staleness check:
-- [ ] Fail loudly (raise exception)
-- [ ] Warn and use stale cache if available
 
 ### Write Path Cache Semantics
 After `catalog.push("name", local_path=...)`:

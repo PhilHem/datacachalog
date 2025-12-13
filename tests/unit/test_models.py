@@ -77,6 +77,80 @@ class TestDataset:
         assert original.cache_path is None  # Original unchanged
 
 
+class TestDatasetWithResolvedPaths:
+    """Tests for Dataset.with_resolved_paths()."""
+
+    @pytest.mark.core
+    def test_resolves_relative_cache_path(self) -> None:
+        """Relative cache_path is resolved against root."""
+        dataset = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            cache_path=Path("data/file.parquet"),
+        )
+        root = Path("/project")
+
+        resolved = dataset.with_resolved_paths(root)
+
+        assert resolved.cache_path == Path("/project/data/file.parquet")
+
+    @pytest.mark.core
+    def test_preserves_absolute_cache_path(self) -> None:
+        """Absolute cache_path is unchanged."""
+        dataset = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            cache_path=Path("/absolute/path/file.parquet"),
+        )
+        root = Path("/project")
+
+        resolved = dataset.with_resolved_paths(root)
+
+        assert resolved.cache_path == Path("/absolute/path/file.parquet")
+
+    @pytest.mark.core
+    def test_preserves_none_cache_path(self) -> None:
+        """None cache_path remains None."""
+        dataset = Dataset(name="test", source="s3://bucket/file.parquet")
+        root = Path("/project")
+
+        resolved = dataset.with_resolved_paths(root)
+
+        assert resolved.cache_path is None
+
+    @pytest.mark.core
+    def test_preserves_other_fields(self) -> None:
+        """Name, source, description are preserved."""
+        dataset = Dataset(
+            name="customers",
+            source="s3://bucket/customers.parquet",
+            description="Customer data",
+            cache_path=Path("data/customers.parquet"),
+        )
+        root = Path("/project")
+
+        resolved = dataset.with_resolved_paths(root)
+
+        assert resolved.name == "customers"
+        assert resolved.source == "s3://bucket/customers.parquet"
+        assert resolved.description == "Customer data"
+
+    @pytest.mark.core
+    def test_returns_new_instance(self) -> None:
+        """Original dataset is unchanged (immutability)."""
+        original = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            cache_path=Path("data/file.parquet"),
+        )
+        root = Path("/project")
+
+        resolved = original.with_resolved_paths(root)
+
+        assert resolved is not original
+        assert original.cache_path == Path("data/file.parquet")
+
+
 class TestFileMetadata:
     """Tests for the FileMetadata model."""
 

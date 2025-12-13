@@ -165,6 +165,9 @@ lines-after-imports = 2
 "tests/**/*.py" = [
     "ARG",    # Unused arguments OK in tests (fixtures)
 ]
+"src/datacachalog/core/models.py" = [
+    "TC003",  # Path needed at runtime for is_absolute() and path joining
+]
 
 [tool.ruff.format]
 # Like Black

@@ -8,11 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Self
-
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Self
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +59,29 @@ class Dataset:
             source=self.source,
             description=self.description,
             cache_path=cache_path,
+        )
+
+    def with_resolved_paths(self, root: Path) -> Self:
+        """Return new Dataset with cache_path resolved against root.
+
+        Relative cache_path values are joined with root to produce
+        absolute paths. Absolute paths and None are unchanged.
+
+        Args:
+            root: Project root directory to resolve relative paths against.
+
+        Returns:
+            New Dataset with resolved cache_path.
+        """
+        if self.cache_path is None or self.cache_path.is_absolute():
+            return self
+
+        resolved = root / self.cache_path
+        return type(self)(
+            name=self.name,
+            source=self.source,
+            description=self.description,
+            cache_path=resolved,
         )
 
 
