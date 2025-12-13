@@ -16,10 +16,12 @@
 
 - [x] S3 storage adapter using boto3
 - [x] `head()` operation for metadata without download
-- [ ] ETag/LastModified staleness detection
-- [ ] Integration tests with moto or localstack
+- [x] ETag/LastModified staleness detection
+- [x] `is_stale()` check without download
+- [x] `invalidate()` to force re-download
+- [x] Export S3Storage from package root `__init__.py`
+- [x] Integration tests with moto or localstack
 - [ ] S3 URI scheme validation in Catalog (route `s3://` to S3Storage)
-- [ ] Export S3Storage from package root `__init__.py`
 
 ## Phase 3: Progress & Parallelism
 
@@ -36,8 +38,6 @@
 
 ## Phase 5: Polish
 
-- [ ] `is_stale()` check without download
-- [ ] `invalidate()` to force re-download
 - [ ] Error handling and meaningful exceptions
 - [ ] Documentation and examples
 

@@ -111,3 +111,31 @@ class Catalog:
             # Shouldn't happen - we just put it
             return dest
         return cached_result[0]
+
+    def is_stale(self, name: str) -> bool:
+        """Check if a dataset's cache is stale without downloading.
+
+        Args:
+            name: The dataset name.
+
+        Returns:
+            True if not cached or if remote has changed since caching.
+
+        Raises:
+            KeyError: If no dataset with that name exists.
+        """
+        dataset = self.get_dataset(name)
+        cached = self._cache.get(name)
+        if cached is None:
+            return True
+        _, cache_meta = cached
+        remote_meta = self._storage.head(dataset.source)
+        return cache_meta.is_stale(remote_meta)
+
+    def invalidate(self, name: str) -> None:
+        """Remove a dataset from cache, forcing re-download on next fetch.
+
+        Args:
+            name: The dataset name.
+        """
+        self._cache.invalidate(name)
