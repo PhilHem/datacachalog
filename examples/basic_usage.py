@@ -17,14 +17,21 @@ customers = Dataset(
     description="Customer master data",
 )
 
-# Create catalog with storage and cache adapters
-# For S3, use: storage=create_router() instead of FilesystemStorage()
+# Option 1: Manual wiring (full control over adapters)
+# Use this when you need custom storage backends or cache configuration
 catalog = Catalog(
     datasets=[customers],
     storage=FilesystemStorage(),
     cache=FileCache(Path("./data")),
     cache_dir=Path("./data"),
 )
+
+# Option 2: Factory method (recommended for most cases)
+# Auto-discovers project root, wires up default adapters (RouterStorage, FileCache)
+# catalog = Catalog.from_directory(
+#     datasets=[customers],
+#     cache_dir="data",  # relative to project root
+# )
 
 # Fetch downloads if not cached or stale, returns local path
 path = catalog.fetch("customers")

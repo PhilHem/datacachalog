@@ -28,6 +28,42 @@ class Catalog:
         self._cache = cache
         self._cache_dir = cache_dir
 
+    @classmethod
+    def from_directory(
+        cls,
+        datasets: list[Dataset],
+        directory: Path | None = None,
+        cache_dir: Path | str = "data",
+    ) -> "Catalog":
+        """Create Catalog with auto-discovered project root and default adapters.
+
+        Args:
+            datasets: List of datasets to register.
+            directory: Start directory for root discovery (defaults to cwd).
+            cache_dir: Cache directory relative to project root or absolute path.
+
+        Returns:
+            Catalog with RouterStorage, FileCache, and resolved paths.
+        """
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import create_router
+        from datacachalog.config import find_project_root
+
+        root = find_project_root(directory)
+
+        resolved_cache_dir = Path(cache_dir)
+        if not resolved_cache_dir.is_absolute():
+            resolved_cache_dir = root / resolved_cache_dir
+
+        resolved_datasets = [ds.with_resolved_paths(root) for ds in datasets]
+
+        return cls(
+            datasets=resolved_datasets,
+            storage=create_router(),
+            cache=FileCache(resolved_cache_dir),
+            cache_dir=resolved_cache_dir,
+        )
+
     @property
     def datasets(self) -> list[Dataset]:
         """List all registered datasets."""

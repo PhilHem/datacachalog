@@ -899,3 +899,118 @@ class TestDatasetsProperty:
 
         # Assert
         assert result == []
+
+
+@pytest.mark.core
+class TestCatalogFromDirectory:
+    """Tests for Catalog.from_directory() factory method."""
+
+    def test_from_directory_discovers_project_root(self, tmp_path: Path) -> None:
+        """from_directory() should discover project root from marker files."""
+        from datacachalog.core.services import Catalog
+
+        # Create project structure with .git marker
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("content")
+
+        dataset = Dataset(name="test", source=str(source_file))
+        catalog = Catalog.from_directory([dataset], directory=tmp_path)
+
+        # Default cache_dir should be {root}/data
+        assert catalog._cache_dir == tmp_path / "data"
+
+    def test_from_directory_resolves_relative_cache_paths(self, tmp_path: Path) -> None:
+        """from_directory() should resolve relative cache_path against root."""
+        from datacachalog.core.services import Catalog
+
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("content")
+
+        dataset = Dataset(
+            name="test",
+            source=str(source_file),
+            cache_path=Path("custom/cache.txt"),  # relative path
+        )
+        catalog = Catalog.from_directory([dataset], directory=tmp_path)
+
+        resolved = catalog.get_dataset("test")
+        assert resolved.cache_path == tmp_path / "custom/cache.txt"
+
+    def test_from_directory_accepts_custom_cache_dir(self, tmp_path: Path) -> None:
+        """from_directory() should accept custom cache directory."""
+        from datacachalog.core.services import Catalog
+
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("content")
+
+        dataset = Dataset(name="test", source=str(source_file))
+        catalog = Catalog.from_directory(
+            [dataset],
+            directory=tmp_path,
+            cache_dir="custom_cache",
+        )
+
+        assert catalog._cache_dir == tmp_path / "custom_cache"
+
+    def test_from_directory_accepts_absolute_cache_dir(self, tmp_path: Path) -> None:
+        """from_directory() should accept absolute cache directory path."""
+        from datacachalog.core.services import Catalog
+
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("content")
+        absolute_cache = tmp_path / "absolute_cache"
+
+        dataset = Dataset(name="test", source=str(source_file))
+        catalog = Catalog.from_directory(
+            [dataset],
+            directory=tmp_path,
+            cache_dir=absolute_cache,
+        )
+
+        assert catalog._cache_dir == absolute_cache
+
+    def test_from_directory_creates_working_catalog(self, tmp_path: Path) -> None:
+        """from_directory() should create a fully functional catalog."""
+        from datacachalog.core.services import Catalog
+
+        # Create project structure
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("test content")
+
+        dataset = Dataset(
+            name="test",
+            source=str(source_file),
+            cache_path=Path("data/test.txt"),
+        )
+        catalog = Catalog.from_directory([dataset], directory=tmp_path)
+
+        # Should be able to fetch
+        path = catalog.fetch("test")
+        assert path.exists()
+        assert path.read_text() == "test content"
+
+    def test_from_directory_uses_cwd_when_no_directory(self, tmp_path: Path) -> None:
+        """from_directory() should use current directory when not specified."""
+        import os
+
+        from datacachalog.core.services import Catalog
+
+        # Create project structure in tmp_path
+        (tmp_path / ".git").mkdir()
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("content")
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            dataset = Dataset(name="test", source=str(source_file))
+            catalog = Catalog.from_directory([dataset])
+
+            assert catalog._cache_dir == tmp_path / "data"
+        finally:
+            os.chdir(original_cwd)

@@ -45,7 +45,7 @@
 ## Phase 6: Configuration Ergonomics
 
 - [x] `Dataset.with_resolved_paths(root)` - resolve relative cache_path against project root
-- [ ] `Catalog.from_directory()` factory - auto-discover root and create with sensible defaults
+- [x] `Catalog.from_directory()` factory - auto-discover root and create with sensible defaults
 
 ## Future
 
