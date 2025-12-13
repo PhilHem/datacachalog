@@ -21,7 +21,7 @@
 - [x] `invalidate()` to force re-download
 - [x] Export S3Storage from package root `__init__.py`
 - [x] Integration tests with moto or localstack
-- [ ] S3 URI scheme validation in Catalog (route `s3://` to S3Storage)
+- [x] S3 URI scheme validation in Catalog (route `s3://` to S3Storage via `RouterStorage`)
 
 ## Phase 3: Progress & Parallelism
 

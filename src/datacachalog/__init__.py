@@ -14,7 +14,12 @@ Example:
 """
 
 from datacachalog.adapters.cache import FileCache
-from datacachalog.adapters.storage import FilesystemStorage, S3Storage
+from datacachalog.adapters.storage import (
+    FilesystemStorage,
+    RouterStorage,
+    S3Storage,
+    create_router,
+)
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
 from datacachalog.core.ports import CachePort, ProgressCallback, StoragePort
 from datacachalog.core.services import Catalog
@@ -31,7 +36,9 @@ __all__ = [
     "FileMetadata",
     "FilesystemStorage",
     "ProgressCallback",
+    "RouterStorage",
     "S3Storage",
     "StoragePort",
     "__version__",
+    "create_router",
 ]
