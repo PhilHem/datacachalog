@@ -14,13 +14,17 @@ Example:
 """
 
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
+from datacachalog.core.ports import CachePort, ProgressCallback, StoragePort
 
 
 __version__ = "0.1.0"
 
 __all__ = [
     "CacheMetadata",
+    "CachePort",
     "Dataset",
     "FileMetadata",
+    "ProgressCallback",
+    "StoragePort",
     "__version__",
 ]

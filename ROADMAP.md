@@ -2,10 +2,10 @@
 
 ## Phase 1: Core Foundation
 
-- [ ] Project setup (pyproject.toml, uv, ruff, mypy, pytest)
-- [ ] Pre-commit hooks (ruff check, ruff format, mypy, pytest)
-- [ ] Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
-- [ ] Port definitions: `StoragePort`, `CachePort`
+- [x] Project setup (pyproject.toml, uv, ruff, mypy, pytest)
+- [x] Pre-commit hooks (ruff check, ruff format, mypy, pytest)
+- [x] Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
+- [x] Port definitions: `StoragePort`, `CachePort`
 - [ ] Filesystem storage adapter (for local dev/testing)
 - [ ] File cache adapter with JSON metadata sidecar
 - [ ] Basic `Catalog` class with `fetch()` returning `Path`
