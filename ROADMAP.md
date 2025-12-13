@@ -6,7 +6,8 @@
 - [x] Pre-commit hooks (ruff check, ruff format, mypy, pytest)
 - [x] Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
 - [x] Port definitions: `StoragePort`, `CachePort`
-- [ ] Filesystem storage adapter (for local dev/testing)
+- [x] Filesystem storage adapter (for local dev/testing)
+- [ ] Export `FilesystemStorage` from package `__init__.py`
 - [ ] File cache adapter with JSON metadata sidecar
 - [ ] Basic `Catalog` class with `fetch()` returning `Path`
 
