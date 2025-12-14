@@ -316,3 +316,78 @@ class TestCatalogFetch:
         result = runner.invoke(app, ["fetch", "customers"])
 
         assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    def test_fetch_all_downloads_all_datasets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch --all downloads all datasets and outputs all paths."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        # Create catalog with multiple datasets
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+                Dataset(name="orders", source="{storage_dir / "orders.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["fetch", "--all"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Both dataset paths should be in output
+        assert "customers" in result.output
+        assert "orders" in result.output
+
+    def test_fetch_all_with_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch --all --catalog X fetches only datasets from that catalog."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "metrics.csv").write_text("id,value\n1,42\n")
+
+        # Create two catalogs
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{storage_dir / "metrics.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["fetch", "--all", "--catalog", "core"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Only core catalog datasets
+        assert "customers" in result.output
+        assert "metrics" not in result.output

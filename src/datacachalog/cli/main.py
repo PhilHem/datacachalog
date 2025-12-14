@@ -128,7 +128,13 @@ def init(
 
 @app.command()
 def fetch(
-    name: str = typer.Argument(..., help="Name of the dataset to fetch."),
+    name: str | None = typer.Argument(None, help="Name of the dataset to fetch."),
+    all_datasets: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Fetch all datasets.",
+    ),
     catalog: str | None = typer.Option(
         None,
         "--catalog",
@@ -140,6 +146,15 @@ def fetch(
     from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
     from datacachalog.config import find_project_root
     from datacachalog.discovery import discover_catalogs, load_catalog
+
+    # Validate arguments
+    if not name and not all_datasets:
+        typer.echo("Error: Either provide a dataset name or use --all.")
+        raise typer.Exit(1)
+
+    if name and all_datasets:
+        typer.echo("Error: Cannot use both a dataset name and --all.")
+        raise typer.Exit(1)
 
     root = find_project_root()
     catalogs = discover_catalogs(root)
@@ -153,21 +168,27 @@ def fetch(
         catalogs = {catalog: catalogs[catalog]}
 
     # Load all datasets
-    all_datasets = []
+    all_ds = []
     cache_dir = "data"
     for _catalog_name, catalog_path in catalogs.items():
         datasets, cat_cache_dir = load_catalog(catalog_path)
-        all_datasets.extend(datasets)
+        all_ds.extend(datasets)
         if cat_cache_dir:
             cache_dir = cat_cache_dir
 
     # Create catalog and fetch
-    cat = Catalog.from_directory(all_datasets, directory=root, cache_dir=cache_dir)
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
 
     try:
         with RichProgressReporter() as progress:
-            path = cat.fetch(name, progress=progress)
-        typer.echo(str(path))
+            if all_datasets:
+                paths = cat.fetch_all(progress=progress)
+                for ds_name, path in paths.items():
+                    typer.echo(f"{ds_name}: {path}")
+            else:
+                assert name is not None  # Validated above
+                path = cat.fetch(name, progress=progress)
+                typer.echo(str(path))
     except DatasetNotFoundError as e:
         typer.echo(f"Dataset '{name}' not found.")
         if e.recovery_hint:
