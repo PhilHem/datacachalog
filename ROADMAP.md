@@ -57,14 +57,16 @@ Resolved design questions that inform future implementation:
 
 ## Phase 8: CLI
 
-- [ ] Add `typer` dependency
-- [ ] CLI entry point via `catalog` command
-- [ ] `catalog list` - show registered datasets
+- [x] Add `typer` dependency
+- [x] CLI entry point via `catalog` command
+- [x] `catalog init` - scaffold project structure (`.datacachalog/catalogs/`, `data/` dirs)
+- [x] `catalog list` - show registered datasets (with `--catalog` filter)
+- [x] Catalog discovery (`discover_catalogs`, `load_catalog` from `.datacachalog/catalogs/*.py`)
 - [ ] `catalog fetch <name>` - fetch single dataset
 - [ ] `catalog fetch --all` - fetch all datasets
 - [ ] `catalog status` - show cache state (cached/stale/missing) per dataset
 - [ ] `catalog invalidate <name>` - force re-download on next fetch
-- [ ] Catalog discovery (find `catalog.py` or similar in project root)
+- [ ] Error handling in catalog discovery (graceful syntax error messages)
 
 ## Phase 9: Glob Patterns
 

@@ -40,6 +40,7 @@ from datacachalog.core.ports import (
     StoragePort,
 )
 from datacachalog.core.services import Catalog
+from datacachalog.discovery import discover_catalogs, load_catalog
 from datacachalog.progress import RichProgressReporter
 
 
@@ -70,5 +71,7 @@ __all__ = [
     "StoragePort",
     "__version__",
     "create_router",
+    "discover_catalogs",
     "find_project_root",
+    "load_catalog",
 ]

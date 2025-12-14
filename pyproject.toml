@@ -20,6 +20,7 @@ keywords = ["data", "catalog", "cache", "s3", "storage"]
 dependencies = [
     "boto3>=1.34.0",
     "rich>=13.0.0",
+    "typer>=0.20.0",
 ]
 
 [dependency-groups]
@@ -32,6 +33,9 @@ dev = [
     "moto[s3]>=5.0.0",
     "boto3-stubs[s3]>=1.34.0",
 ]
+
+[project.scripts]
+catalog = "datacachalog.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -167,6 +171,9 @@ lines-after-imports = 2
 ]
 "src/datacachalog/core/models.py" = [
     "TC003",  # Path needed at runtime for is_absolute() and path joining
+]
+"src/datacachalog/discovery.py" = [
+    "TC003",  # Path needed at runtime for glob, stem, etc.
 ]
 
 [tool.ruff.format]

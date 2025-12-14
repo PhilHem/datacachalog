@@ -353,9 +353,11 @@ The hooks use the same commands as CI, maintaining parity between local developm
 3. Write integration tests with emulator or mock
 
 ### Adding CLI Commands
-1. Add command in `cli/`
+1. Add command in `cli/main.py`
 2. Import core Catalog, call same methods as library
 3. Wire up rich progress automatically
+
+**Typer gotcha**: When a Typer app has only one command, positional arguments don't work correctly (the app runs in "single command mode"). Always ensure the app has at least two commands registered.
 
 ## Goals & Non-Goals
 
