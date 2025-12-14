@@ -55,12 +55,29 @@ Resolved design questions that inform future implementation:
 - [x] **Post-Push Authority**: Remote is authoritative (cache stores remote ETag after push, so next fetch skips download if unchanged)
 - [x] **Credentials**: boto3's full credential chain (adapter delegates to boto3 defaults, with optional client injection for custom auth)
 
+## Phase 8: CLI
+
+- [ ] Add `typer` dependency
+- [ ] CLI entry point via `catalog` command
+- [ ] `catalog list` - show registered datasets
+- [ ] `catalog fetch <name>` - fetch single dataset
+- [ ] `catalog fetch --all` - fetch all datasets
+- [ ] `catalog status` - show cache state (cached/stale/missing) per dataset
+- [ ] `catalog invalidate <name>` - force re-download on next fetch
+- [ ] Catalog discovery (find `catalog.py` or similar in project root)
+
+## Phase 9: Glob Patterns
+
+- [ ] Glob pattern support in `source` field (`s3://bucket/data/*.parquet`)
+- [ ] `fetch()` returns `list[Path]` for glob datasets
+- [ ] Parallel download of matched files
+- [ ] Staleness check per-file (only download changed files)
+- [ ] Cache path derivation for glob matches (preserve relative structure)
+
 ## Future
 
 - Graceful network failure handling (warn and use stale cache if available, raise only if no cache)
-- Glob pattern support for multi-file datasets
 - GCS and Azure Blob storage adapters
-- Optional CLI (`catalog fetch customers`)
 - Retry logic for transient failures
 - Cache eviction policies (LRU, max size)
 - Async API variant
