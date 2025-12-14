@@ -66,7 +66,7 @@ Resolved design questions that inform future implementation:
 - [x] `catalog fetch --all` - fetch all datasets
 - [x] `catalog status` - show cache state (cached/stale/missing) per dataset
 - [x] `catalog invalidate <name>` - force re-download on next fetch
-- [ ] Error handling in catalog discovery (graceful syntax error messages)
+- [x] Error handling in catalog discovery (graceful syntax error messages)
 
 ## Phase 9: Glob Patterns
 

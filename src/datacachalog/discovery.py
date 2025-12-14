@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from datacachalog.core.exceptions import CatalogLoadError
+
 
 if TYPE_CHECKING:
     from datacachalog.core.models import Dataset
@@ -54,6 +56,32 @@ def load_catalog(path: Path) -> tuple[list[Dataset], str | None]:
 
     try:
         spec.loader.exec_module(module)
+    except SyntaxError as e:
+        raise CatalogLoadError(
+            f"Syntax error in catalog '{path.name}': {e.msg}",
+            catalog_path=path,
+            line=e.lineno,
+            cause=e,
+        ) from e
+    except ImportError as e:
+        raise CatalogLoadError(
+            f"Import error in catalog '{path.name}': {e}",
+            catalog_path=path,
+            cause=e,
+        ) from e
+    except NameError as e:
+        raise CatalogLoadError(
+            f"Name error in catalog '{path.name}': {e}",
+            catalog_path=path,
+            cause=e,
+        ) from e
+    except Exception as e:
+        # Catch-all for other execution errors (ValueError, TypeError, etc.)
+        raise CatalogLoadError(
+            f"Error loading catalog '{path.name}': {e}",
+            catalog_path=path,
+            cause=e,
+        ) from e
     finally:
         # Clean up to avoid polluting sys.modules
         sys.modules.pop(module_name, None)

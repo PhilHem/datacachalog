@@ -4,6 +4,8 @@ from pathlib import Path
 
 import typer
 
+from datacachalog.core.exceptions import CatalogLoadError
+
 
 app = typer.Typer(
     name="catalog",
@@ -171,7 +173,13 @@ def fetch(
     all_ds = []
     cache_dir = "data"
     for _catalog_name, catalog_path in catalogs.items():
-        datasets, cat_cache_dir = load_catalog(catalog_path)
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
         all_ds.extend(datasets)
         if cat_cache_dir:
             cache_dir = cat_cache_dir
@@ -228,7 +236,13 @@ def list_datasets(
     all_datasets: list[tuple[str, str, str]] = []  # (catalog, name, source)
 
     for catalog_name, catalog_path in sorted(catalogs.items()):
-        datasets, _ = load_catalog(catalog_path)
+        try:
+            datasets, _ = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
         for ds in datasets:
             all_datasets.append((catalog_name, ds.name, ds.source))
 
@@ -280,7 +294,13 @@ def status(
     cache_dir = "data"
 
     for catalog_name, catalog_path in sorted(catalogs.items()):
-        datasets, cat_cache_dir = load_catalog(catalog_path)
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
         for ds in datasets:
             catalog_datasets.append((catalog_name, ds.name, ds.source))
             all_ds.append(ds)
@@ -332,7 +352,13 @@ def invalidate(
     all_ds = []
     cache_dir = "data"
     for _catalog_name, catalog_path in catalogs.items():
-        datasets, cat_cache_dir = load_catalog(catalog_path)
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
         all_ds.extend(datasets)
         if cat_cache_dir:
             cache_dir = cat_cache_dir

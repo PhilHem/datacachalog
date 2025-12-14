@@ -607,3 +607,93 @@ class TestCatalogInvalidate:
 
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
+
+
+@pytest.mark.cli
+class TestCatalogLoadErrors:
+    """Tests for graceful error handling when catalog files are malformed."""
+
+    def test_list_shows_graceful_error_for_syntax_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list shows user-friendly error for catalog with syntax error."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad.py").write_text("def broken(\n")  # Syntax error
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad.py" in result.output
+        assert "hint" in result.output.lower()
+
+    def test_list_shows_graceful_error_for_import_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list shows user-friendly error for catalog with import error."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad_import.py").write_text(
+            "from nonexistent_module import something"
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad_import.py" in result.output
+
+    def test_fetch_shows_graceful_error_for_bad_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch shows user-friendly error for malformed catalog."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad.py").write_text("datasets = undefined_var")
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["fetch", "something"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad.py" in result.output
+
+    def test_status_shows_graceful_error_for_bad_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """status shows user-friendly error for malformed catalog."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad.py").write_text("def broken(\n")
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad.py" in result.output
+
+    def test_invalidate_shows_graceful_error_for_bad_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate shows user-friendly error for malformed catalog."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad.py").write_text("def broken(\n")
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["invalidate", "something"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad.py" in result.output

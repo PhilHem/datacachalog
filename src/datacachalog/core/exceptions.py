@@ -122,3 +122,32 @@ class ConfigurationError(DatacachalogError):
     """Raised for configuration problems (missing required settings)."""
 
     pass
+
+
+class CatalogLoadError(DatacachalogError):
+    """Raised when a catalog file cannot be loaded.
+
+    Attributes:
+        catalog_path: Path to the catalog file that failed to load.
+        line: Line number where the error occurred (if available).
+        cause: The underlying exception, if any.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        catalog_path: Path,
+        line: int | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        self.catalog_path = catalog_path
+        self.line = line
+        self.cause = cause
+        super().__init__(message)
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest checking the catalog file at the specific line."""
+        if self.line:
+            return f"Check {self.catalog_path.name} at line {self.line}"
+        return f"Check {self.catalog_path.name} for syntax or import errors"

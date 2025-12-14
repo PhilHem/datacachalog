@@ -24,6 +24,7 @@ from datacachalog.config import find_project_root
 from datacachalog.core.exceptions import (
     CacheCorruptError,
     CacheError,
+    CatalogLoadError,
     ConfigurationError,
     DatacachalogError,
     DatasetNotFoundError,
@@ -52,6 +53,7 @@ __all__ = [
     "CacheMetadata",
     "CachePort",
     "Catalog",
+    "CatalogLoadError",
     "ConfigurationError",
     "DatacachalogError",
     "Dataset",

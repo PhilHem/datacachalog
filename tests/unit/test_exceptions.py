@@ -212,3 +212,83 @@ class TestConfigurationError:
         from datacachalog.core.exceptions import ConfigurationError, DatacachalogError
 
         assert issubclass(ConfigurationError, DatacachalogError)
+
+
+@pytest.mark.core
+class TestCatalogLoadError:
+    """Tests for CatalogLoadError."""
+
+    def test_is_datacachalog_error_subclass(self) -> None:
+        """CatalogLoadError should inherit from DatacachalogError."""
+        from datacachalog.core.exceptions import CatalogLoadError, DatacachalogError
+
+        assert issubclass(CatalogLoadError, DatacachalogError)
+
+    def test_stores_catalog_path(self) -> None:
+        """CatalogLoadError should store the catalog path."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("/catalogs/core.py"))
+        assert err.catalog_path == Path("/catalogs/core.py")
+
+    def test_stores_line_number(self) -> None:
+        """CatalogLoadError should store the line number when provided."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("foo.py"), line=42)
+        assert err.line == 42
+
+    def test_line_defaults_to_none(self) -> None:
+        """line should default to None."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("foo.py"))
+        assert err.line is None
+
+    def test_stores_cause(self) -> None:
+        """CatalogLoadError should store the underlying cause."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        cause = SyntaxError("unexpected EOF")
+        err = CatalogLoadError("msg", catalog_path=Path("foo.py"), cause=cause)
+        assert err.cause is cause
+
+    def test_cause_defaults_to_none(self) -> None:
+        """cause should default to None."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("foo.py"))
+        assert err.cause is None
+
+    def test_recovery_hint_includes_line_when_provided(self) -> None:
+        """recovery_hint should mention line number when available."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("core.py"), line=42)
+        hint = err.recovery_hint
+        assert hint is not None
+        assert "line 42" in hint
+        assert "core.py" in hint
+
+    def test_recovery_hint_without_line_number(self) -> None:
+        """recovery_hint should provide guidance even without line number."""
+        from pathlib import Path
+
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        err = CatalogLoadError("msg", catalog_path=Path("core.py"))
+        hint = err.recovery_hint
+        assert hint is not None
+        assert "core.py" in hint
