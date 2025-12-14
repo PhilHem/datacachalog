@@ -64,7 +64,7 @@ Resolved design questions that inform future implementation:
 - [x] Catalog discovery (`discover_catalogs`, `load_catalog` from `.datacachalog/catalogs/*.py`)
 - [x] `catalog fetch <name>` - fetch single dataset
 - [x] `catalog fetch --all` - fetch all datasets
-- [ ] `catalog status` - show cache state (cached/stale/missing) per dataset
+- [x] `catalog status` - show cache state (cached/stale/missing) per dataset
 - [ ] `catalog invalidate <name>` - force re-download on next fetch
 - [ ] Error handling in catalog discovery (graceful syntax error messages)
 

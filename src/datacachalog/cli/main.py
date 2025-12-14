@@ -245,6 +245,73 @@ def list_datasets(
             typer.echo(f"{catalog_name}/{name}: {source}")
 
 
+@app.command()
+def status(
+    catalog: str | None = typer.Option(
+        None,
+        "--catalog",
+        "-c",
+        help="Show status for a specific catalog only.",
+    ),
+) -> None:
+    """Show cache state (cached/stale/missing) per dataset."""
+    from datacachalog import Catalog
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No datasets found. Run 'catalog init' to get started.")
+        return
+
+    # Filter to specific catalog if requested
+    if catalog:
+        if catalog not in catalogs:
+            typer.echo(f"Catalog '{catalog}' not found.")
+            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
+            raise typer.Exit(1)
+        catalogs = {catalog: catalogs[catalog]}
+
+    # Load datasets per catalog
+    catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
+    all_ds = []
+    cache_dir = "data"
+
+    for catalog_name, catalog_path in sorted(catalogs.items()):
+        datasets, cat_cache_dir = load_catalog(catalog_path)
+        for ds in datasets:
+            catalog_datasets.append((catalog_name, ds.name, ds.source))
+            all_ds.append(ds)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    if not catalog_datasets:
+        typer.echo("No datasets found. Run 'catalog init' to get started.")
+        return
+
+    # Create catalog to check status
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    # Check status for each dataset
+    for catalog_name, ds_name, _source in catalog_datasets:
+        # Check if cached
+        cached = cat._cache.get(ds_name)
+        if cached is None:
+            state = "missing"
+        elif cat.is_stale(ds_name):
+            state = "stale"
+        else:
+            state = "fresh"
+
+        # Format output
+        if len(catalogs) == 1 and catalog:
+            typer.echo(f"{ds_name}: {state}")
+        else:
+            typer.echo(f"{catalog_name}/{ds_name}: {state}")
+
+
 def main() -> None:
     """Entry point for the CLI."""
     app()
