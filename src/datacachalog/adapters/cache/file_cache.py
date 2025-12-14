@@ -90,8 +90,8 @@ class FileCache:
         file_path = self._file_path(key)
         meta_path = self._meta_path(key)
 
-        # Create cache directory if it doesn't exist
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Create parent directories (handles nested keys like "dataset/file.txt")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Copy file to cache
         shutil.copy2(path, file_path)

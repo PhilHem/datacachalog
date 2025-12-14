@@ -124,6 +124,25 @@ class ConfigurationError(DatacachalogError):
     pass
 
 
+class EmptyGlobMatchError(DatacachalogError):
+    """Raised when a glob pattern matches no files.
+
+    Attributes:
+        pattern: The glob pattern that matched nothing.
+        prefix: The prefix/directory that was searched.
+    """
+
+    def __init__(self, pattern: str, prefix: str) -> None:
+        self.pattern = pattern
+        self.prefix = prefix
+        super().__init__(f"No files match pattern '{pattern}' in '{prefix}'")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest verifying files exist."""
+        return f"Verify files exist at {self.prefix} matching {self.pattern}"
+
+
 class CatalogLoadError(DatacachalogError):
     """Raised when a catalog file cannot be loaded.
 

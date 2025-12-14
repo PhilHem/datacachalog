@@ -78,6 +78,9 @@ def test_class_satisfies_storage_port():
         def head(self, source: str) -> FileMetadata:
             return FileMetadata(etag="abc")
 
+        def list(self, prefix: str, pattern: str | None = None) -> list[str]:
+            return []
+
     storage: StoragePort = FakeStorage()
     assert isinstance(storage, StoragePort)
 

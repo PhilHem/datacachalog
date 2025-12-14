@@ -182,6 +182,104 @@ class TestUpload:
 
 
 @pytest.mark.storage
+class TestList:
+    """Tests for list() method."""
+
+    def test_list_returns_objects_with_prefix(self, s3_client) -> None:
+        """list() should return all objects matching prefix."""
+        from datacachalog.adapters.storage import S3Storage
+
+        s3_client.put_object(Bucket="test-bucket", Key="data/a.parquet", Body=b"a")
+        s3_client.put_object(Bucket="test-bucket", Key="data/b.parquet", Body=b"b")
+        s3_client.put_object(Bucket="test-bucket", Key="other/c.parquet", Body=b"c")
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/data/")
+
+        assert len(result) == 2
+        assert "s3://test-bucket/data/a.parquet" in result
+        assert "s3://test-bucket/data/b.parquet" in result
+        assert "s3://test-bucket/other/c.parquet" not in result
+
+    def test_list_with_pattern_filters_by_glob(self, s3_client) -> None:
+        """list() with pattern should filter by glob."""
+        from datacachalog.adapters.storage import S3Storage
+
+        s3_client.put_object(Bucket="test-bucket", Key="data/a.parquet", Body=b"a")
+        s3_client.put_object(Bucket="test-bucket", Key="data/b.parquet", Body=b"b")
+        s3_client.put_object(Bucket="test-bucket", Key="data/c.csv", Body=b"c")
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/data/", pattern="*.parquet")
+
+        assert len(result) == 2
+        assert "s3://test-bucket/data/a.parquet" in result
+        assert "s3://test-bucket/data/b.parquet" in result
+        assert "s3://test-bucket/data/c.csv" not in result
+
+    def test_list_returns_sorted_alphabetically(self, s3_client) -> None:
+        """list() should return results sorted alphabetically."""
+        from datacachalog.adapters.storage import S3Storage
+
+        s3_client.put_object(Bucket="test-bucket", Key="data/z.txt", Body=b"z")
+        s3_client.put_object(Bucket="test-bucket", Key="data/a.txt", Body=b"a")
+        s3_client.put_object(Bucket="test-bucket", Key="data/m.txt", Body=b"m")
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/data/")
+
+        assert result == [
+            "s3://test-bucket/data/a.txt",
+            "s3://test-bucket/data/m.txt",
+            "s3://test-bucket/data/z.txt",
+        ]
+
+    def test_list_empty_prefix_returns_empty_list(self, s3_client) -> None:
+        """list() with no matching objects should return empty list."""
+        from datacachalog.adapters.storage import S3Storage
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/nonexistent/")
+
+        assert result == []
+
+    def test_list_handles_pagination(self, s3_client) -> None:
+        """list() should handle paginated results."""
+        from datacachalog.adapters.storage import S3Storage
+
+        # Create more objects than default page size
+        for i in range(25):
+            s3_client.put_object(
+                Bucket="test-bucket", Key=f"data/file{i:02d}.txt", Body=b"x"
+            )
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/data/")
+
+        assert len(result) == 25
+
+    def test_list_recursive_pattern(self, s3_client) -> None:
+        """list() with ** pattern should match nested keys."""
+        from datacachalog.adapters.storage import S3Storage
+
+        s3_client.put_object(Bucket="test-bucket", Key="data/a.parquet", Body=b"a")
+        s3_client.put_object(Bucket="test-bucket", Key="data/sub/b.parquet", Body=b"b")
+        s3_client.put_object(
+            Bucket="test-bucket", Key="data/sub/deep/c.parquet", Body=b"c"
+        )
+        s3_client.put_object(Bucket="test-bucket", Key="data/other.csv", Body=b"x")
+
+        storage = S3Storage(client=s3_client)
+        result = storage.list("s3://test-bucket/data/", pattern="**/*.parquet")
+
+        # S3 is flat, so ** should match all .parquet at any depth
+        assert len(result) == 3
+        assert "s3://test-bucket/data/a.parquet" in result
+        assert "s3://test-bucket/data/sub/b.parquet" in result
+        assert "s3://test-bucket/data/sub/deep/c.parquet" in result
+
+
+@pytest.mark.storage
 class TestProtocolConformance:
     """Tests for StoragePort protocol conformance."""
 

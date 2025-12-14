@@ -177,6 +177,118 @@ class TestUpload:
 
 
 @pytest.mark.storage
+class TestList:
+    """Tests for list() method."""
+
+    def test_list_returns_files_in_directory(self, tmp_path: Path) -> None:
+        """list() should return all files in directory."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        # Create test files
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "b.txt").write_text("b")
+        (tmp_path / "c.parquet").write_text("c")
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path))
+
+        assert len(result) == 3
+        assert str(tmp_path / "a.txt") in result
+        assert str(tmp_path / "b.txt") in result
+        assert str(tmp_path / "c.parquet") in result
+
+    def test_list_with_pattern_filters_by_glob(self, tmp_path: Path) -> None:
+        """list() with pattern should filter by glob."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "b.txt").write_text("b")
+        (tmp_path / "c.parquet").write_text("c")
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path), pattern="*.txt")
+
+        assert len(result) == 2
+        assert str(tmp_path / "a.txt") in result
+        assert str(tmp_path / "b.txt") in result
+        assert str(tmp_path / "c.parquet") not in result
+
+    def test_list_returns_sorted_alphabetically(self, tmp_path: Path) -> None:
+        """list() should return results sorted alphabetically."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        (tmp_path / "z.txt").write_text("z")
+        (tmp_path / "a.txt").write_text("a")
+        (tmp_path / "m.txt").write_text("m")
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path))
+
+        assert result == [
+            str(tmp_path / "a.txt"),
+            str(tmp_path / "m.txt"),
+            str(tmp_path / "z.txt"),
+        ]
+
+    def test_list_empty_directory_returns_empty_list(self, tmp_path: Path) -> None:
+        """list() on empty directory should return empty list."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path))
+
+        assert result == []
+
+    def test_list_nonexistent_directory_raises_storage_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """list() on nonexistent directory should raise StorageNotFoundError."""
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import StorageNotFoundError
+
+        storage = FilesystemStorage()
+
+        with pytest.raises(StorageNotFoundError) as exc_info:
+            storage.list(str(tmp_path / "nonexistent"))
+
+        assert "nonexistent" in str(exc_info.value)
+
+    def test_list_excludes_directories(self, tmp_path: Path) -> None:
+        """list() should only return files, not directories."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        (tmp_path / "file.txt").write_text("content")
+        (tmp_path / "subdir").mkdir()
+        (tmp_path / "subdir" / "nested.txt").write_text("nested")
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path))
+
+        assert len(result) == 1
+        assert str(tmp_path / "file.txt") in result
+
+    def test_list_recursive_pattern(self, tmp_path: Path) -> None:
+        """list() with ** pattern should search recursively."""
+        from datacachalog.adapters.storage import FilesystemStorage
+
+        (tmp_path / "a.parquet").write_text("a")
+        (tmp_path / "subdir").mkdir()
+        (tmp_path / "subdir" / "b.parquet").write_text("b")
+        (tmp_path / "subdir" / "deep").mkdir()
+        (tmp_path / "subdir" / "deep" / "c.parquet").write_text("c")
+        (tmp_path / "other.txt").write_text("other")
+
+        storage = FilesystemStorage()
+        result = storage.list(str(tmp_path), pattern="**/*.parquet")
+
+        # ** matches zero or more directories, so includes root level too
+        assert len(result) == 3
+        assert str(tmp_path / "a.parquet") in result
+        assert str(tmp_path / "subdir" / "b.parquet") in result
+        assert str(tmp_path / "subdir" / "deep" / "c.parquet") in result
+
+
+@pytest.mark.storage
 class TestProtocolConformance:
     """Tests for StoragePort protocol conformance."""
 

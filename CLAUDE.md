@@ -95,6 +95,7 @@ class StoragePort(Protocol):
     def download(self, source: str, dest: Path, progress: ProgressCallback) -> None: ...
     def upload(self, local: Path, dest: str) -> None: ...
     def head(self, source: str) -> FileMetadata: ...  # ETag, LastModified
+    def list(self, prefix: str, pattern: str | None = None) -> list[str]: ...  # For globs
 
 class CachePort(Protocol):
     """Local file cache with metadata tracking"""
@@ -236,7 +237,7 @@ catalog.invalidate("customers")
 2. Adapters implement Port protocols
 3. Staleness always checked - no silent stale data
 4. File formats are opaque - library doesn't parse file contents
-5. One file = one dataset (no glob patterns initially)
+5. Glob patterns supported - `fetch()` returns `Path | list[Path]`
 
 ## Balancing Abstraction vs Coupling
 
@@ -373,14 +374,11 @@ The hooks use the same commands as CI, maintaining parity between local developm
 - Not a data processing library - doesn't read file contents
 - Not a data lake or warehouse
 - No schema introspection or data validation
-- No glob patterns or partitioned datasets (initially)
 - No distributed caching
 - No framework integrations (FastAPI, Django)
 
 ## Future Directions
 
-- Glob pattern support for multi-file datasets
 - GCS and Azure Blob storage adapters
-- Optional CLI for common operations
 - Retry logic for failed downloads
 - Cache eviction policies (LRU, size-based)

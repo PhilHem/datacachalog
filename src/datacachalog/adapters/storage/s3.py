@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import fnmatch
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 import boto3
@@ -126,6 +128,69 @@ class S3Storage:
 
         # Upload complete file
         self._client.put_object(Bucket=bucket, Key=key, Body=b"".join(chunks))
+
+    def list(self, prefix: str, pattern: str | None = None) -> list[str]:
+        """List S3 objects matching a prefix and optional glob pattern.
+
+        Args:
+            prefix: S3 URI prefix (e.g., "s3://bucket/path/").
+            pattern: Optional glob pattern for filtering (e.g., "*.parquet").
+                Supports ** for matching any depth.
+
+        Returns:
+            List of full S3 URIs for matching objects, sorted alphabetically.
+        """
+        bucket, key_prefix = self._parse_s3_uri_prefix(prefix)
+
+        paginator = self._client.get_paginator("list_objects_v2")
+        results: list[str] = []
+
+        for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+
+                if pattern is None:
+                    results.append(f"s3://{bucket}/{key}")
+                else:
+                    filename = PurePosixPath(key).name
+
+                    # Handle ** pattern (match any depth)
+                    if "**" in pattern:
+                        # For **/*.ext, match files at any depth including root
+                        # Extract the file pattern (e.g., "*.parquet" from "**/*.parquet")
+                        file_pattern = pattern.split("/")[-1]
+                        if fnmatch.fnmatch(filename, file_pattern):
+                            results.append(f"s3://{bucket}/{key}")
+                    else:
+                        # For simple patterns, match just the filename
+                        if fnmatch.fnmatch(filename, pattern):
+                            results.append(f"s3://{bucket}/{key}")
+
+        return sorted(results)
+
+    def _parse_s3_uri_prefix(self, uri: str) -> tuple[str, str]:
+        """Parse an S3 URI prefix into bucket and key prefix.
+
+        Unlike _parse_s3_uri, this allows empty key (bucket-level prefix).
+
+        Args:
+            uri: S3 URI in format s3://bucket/ or s3://bucket/prefix/.
+
+        Returns:
+            Tuple of (bucket, key_prefix).
+
+        Raises:
+            ValueError: If URI is not a valid S3 URI.
+        """
+        if not uri.startswith("s3://"):
+            raise ValueError(f"Invalid S3 URI: {uri}")
+
+        path = uri[5:]  # Remove s3://
+        parts = path.split("/", 1)
+        bucket = parts[0]
+        key_prefix = parts[1] if len(parts) > 1 else ""
+
+        return bucket, key_prefix
 
     def _parse_s3_uri(self, uri: str) -> tuple[str, str]:
         """Parse an S3 URI into bucket and key.

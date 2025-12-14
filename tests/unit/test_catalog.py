@@ -1014,3 +1014,212 @@ class TestCatalogFromDirectory:
             assert catalog._cache_dir == tmp_path / "data"
         finally:
             os.chdir(original_cwd)
+
+
+@pytest.mark.core
+class TestFetchGlob:
+    """Tests for glob pattern support in fetch()."""
+
+    def test_fetch_glob_returns_list_of_paths(self, tmp_path: Path) -> None:
+        """fetch() with glob pattern should return list[Path]."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create multiple files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "data_2024_01.parquet").write_text("jan")
+        (storage_dir / "data_2024_02.parquet").write_text("feb")
+        (storage_dir / "data_2024_03.parquet").write_text("mar")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        # Dataset with glob pattern
+        dataset = Dataset(
+            name="monthly_data",
+            source=str(storage_dir / "*.parquet"),
+        )
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Act
+        result = catalog.fetch("monthly_data")
+
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert all(isinstance(p, Path) for p in result)
+
+    def test_fetch_glob_downloads_all_matching_files(self, tmp_path: Path) -> None:
+        """fetch() should download all files matching the glob pattern."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "a.parquet").write_text("content a")
+        (storage_dir / "b.parquet").write_text("content b")
+        (storage_dir / "c.csv").write_text("not matched")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="data", source=str(storage_dir / "*.parquet"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Act
+        paths = catalog.fetch("data")
+
+        # Assert: only .parquet files matched
+        assert len(paths) == 2
+        contents = {p.read_text() for p in paths}
+        assert contents == {"content a", "content b"}
+
+    def test_fetch_glob_caches_each_file_separately(self, tmp_path: Path) -> None:
+        """Each file matched by glob should have its own cache entry."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "file1.txt").write_text("one")
+        (storage_dir / "file2.txt").write_text("two")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="files", source=str(storage_dir / "*.txt"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Act
+        catalog.fetch("files")
+
+        # Assert: each file has its own cache entry
+        assert cache.get("files/file1.txt") is not None
+        assert cache.get("files/file2.txt") is not None
+
+    def test_fetch_glob_empty_match_raises_error(self, tmp_path: Path) -> None:
+        """fetch() should raise EmptyGlobMatchError when pattern matches nothing."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import EmptyGlobMatchError
+        from datacachalog.core.services import Catalog
+
+        # Setup: empty directory
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="data", source=str(storage_dir / "*.parquet"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Act & Assert
+        with pytest.raises(EmptyGlobMatchError) as exc_info:
+            catalog.fetch("data")
+
+        assert "*.parquet" in str(exc_info.value)
+        assert exc_info.value.recovery_hint is not None
+
+    def test_fetch_non_glob_still_returns_single_path(self, tmp_path: Path) -> None:
+        """fetch() without glob should return single Path (backward compatible)."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "single.csv").write_text("content")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="single",
+            source=str(storage_dir / "single.csv"),
+            cache_path=cache_dir / "single.csv",
+        )
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Act
+        result = catalog.fetch("single")
+
+        # Assert: single Path, not list
+        assert isinstance(result, Path)
+        assert result.read_text() == "content"
+
+    def test_fetch_glob_checks_staleness_per_file(self, tmp_path: Path) -> None:
+        """Each file in glob should have independent staleness checking."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        file1 = storage_dir / "file1.txt"
+        file2 = storage_dir / "file2.txt"
+        file1.write_text("original 1")
+        file2.write_text("original 2")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="files", source=str(storage_dir / "*.txt"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # First fetch
+        catalog.fetch("files")
+
+        # Modify only file2
+        file2.write_text("updated 2")
+
+        # Second fetch
+        paths = catalog.fetch("files")
+
+        # Assert: file2 was re-downloaded with new content
+        contents = {p.read_text() for p in paths}
+        assert contents == {"original 1", "updated 2"}

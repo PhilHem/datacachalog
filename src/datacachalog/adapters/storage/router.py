@@ -87,6 +87,11 @@ class RouterStorage:
         backend, path = self._get_backend_and_path(dest)
         backend.upload(local, path, progress)
 
+    def list(self, prefix: str, pattern: str | None = None) -> list[str]:
+        """List files by delegating to appropriate backend."""
+        backend, path = self._get_backend_and_path(prefix)
+        return backend.list(path, pattern)
+
 
 def create_router(s3_client: Any | None = None) -> RouterStorage:
     """Create a RouterStorage with default backends.

@@ -70,11 +70,13 @@ Resolved design questions that inform future implementation:
 
 ## Phase 9: Glob Patterns
 
-- [ ] Glob pattern support in `source` field (`s3://bucket/data/*.parquet`)
-- [ ] `fetch()` returns `list[Path]` for glob datasets
-- [ ] Parallel download of matched files
-- [ ] Staleness check per-file (only download changed files)
-- [ ] Cache path derivation for glob matches (preserve relative structure)
+- [x] Glob pattern support in `source` field (`s3://bucket/data/*.parquet`)
+- [x] `fetch()` returns `list[Path]` for glob datasets
+- [x] Parallel download of matched files
+- [x] Staleness check per-file (only download changed files)
+- [x] Cache path derivation for glob matches (preserve relative structure)
+- [ ] `catalog.invalidate_glob(name)` - clear all cached files for a glob pattern
+- [ ] S3 glob integration test with moto
 
 ## Phase 10: S3 Version Tracking
 
@@ -112,6 +114,7 @@ Access historical versions of objects in versioned S3 buckets, with date-based s
 
 ## Future
 
+- `catalog list --status` flag - combine list and status output
 - Graceful network failure handling (warn and use stale cache if available, raise only if no cache)
 - GCS and Azure Blob storage adapters
 - Retry logic for transient failures

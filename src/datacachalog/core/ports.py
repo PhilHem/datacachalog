@@ -42,6 +42,22 @@ class StoragePort(Protocol):
         """Get file metadata (ETag, LastModified) without downloading."""
         ...
 
+    def list(self, prefix: str, pattern: str | None = None) -> list[str]:
+        """List files matching a prefix and optional glob pattern.
+
+        Args:
+            prefix: Base URI/path to search (e.g., "s3://bucket/logs/" or "/data/").
+            pattern: Optional glob pattern for filtering (e.g., "*.parquet").
+                If None, returns all files under prefix.
+
+        Returns:
+            List of full URIs/paths for matching files, sorted alphabetically.
+
+        Raises:
+            StorageNotFoundError: If the prefix path does not exist.
+        """
+        ...
+
 
 @runtime_checkable
 class CachePort(Protocol):

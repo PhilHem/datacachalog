@@ -220,3 +220,49 @@ class TestFileUriSupport:
 
         assert "file" in router._backends
         assert isinstance(router._backends["file"], FilesystemStorage)
+
+
+@pytest.mark.storage
+class TestRouterStorageList:
+    """Tests for RouterStorage.list() routing."""
+
+    def test_routes_list_to_s3_backend(self) -> None:
+        """list() should delegate s3:// URIs to S3Storage."""
+        from datacachalog.adapters.storage.router import RouterStorage
+
+        mock_s3 = Mock()
+        mock_s3.list.return_value = [
+            "s3://bucket/data/a.parquet",
+            "s3://bucket/data/b.parquet",
+        ]
+
+        router = RouterStorage(backends={"s3": mock_s3})
+        result = router.list("s3://bucket/data/", pattern="*.parquet")
+
+        mock_s3.list.assert_called_once_with("s3://bucket/data/", "*.parquet")
+        assert len(result) == 2
+
+    def test_routes_list_to_filesystem_backend(self) -> None:
+        """list() should delegate local paths to filesystem backend."""
+        from datacachalog.adapters.storage.router import RouterStorage
+
+        mock_fs = Mock()
+        mock_fs.list.return_value = ["/data/a.txt", "/data/b.txt"]
+
+        router = RouterStorage(backends={None: mock_fs})
+        result = router.list("/data/")
+
+        mock_fs.list.assert_called_once_with("/data/", None)
+        assert len(result) == 2
+
+    def test_strips_file_scheme_for_list(self) -> None:
+        """list() should strip file:// prefix before delegating."""
+        from datacachalog.adapters.storage.router import RouterStorage
+
+        mock_fs = Mock()
+        mock_fs.list.return_value = ["/local/data/a.txt"]
+
+        router = RouterStorage(backends={"file": mock_fs})
+        router.list("file:///local/data/", pattern="*.txt")
+
+        mock_fs.list.assert_called_once_with("/local/data/", "*.txt")

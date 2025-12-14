@@ -191,12 +191,22 @@ def fetch(
         with RichProgressReporter() as progress:
             if all_datasets:
                 paths = cat.fetch_all(progress=progress)
-                for ds_name, path in paths.items():
-                    typer.echo(f"{ds_name}: {path}")
+                for ds_name, result in paths.items():
+                    if isinstance(result, list):
+                        # Glob dataset - list all paths
+                        for p in result:
+                            typer.echo(f"{ds_name}: {p}")
+                    else:
+                        typer.echo(f"{ds_name}: {result}")
             else:
                 assert name is not None  # Validated above
-                path = cat.fetch(name, progress=progress)
-                typer.echo(str(path))
+                result = cat.fetch(name, progress=progress)
+                if isinstance(result, list):
+                    # Glob dataset - print each path on its own line
+                    for path in result:
+                        typer.echo(str(path))
+                else:
+                    typer.echo(str(result))
     except DatasetNotFoundError as e:
         typer.echo(f"Dataset '{name}' not found.")
         if e.recovery_hint:

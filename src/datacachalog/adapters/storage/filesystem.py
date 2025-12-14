@@ -108,3 +108,30 @@ class FilesystemStorage:
                 bytes_uploaded += len(chunk)
                 if progress:
                     progress(bytes_uploaded, total_size)
+
+    def list(self, prefix: str, pattern: str | None = None) -> list[str]:
+        """List files matching a prefix directory and optional glob pattern.
+
+        Args:
+            prefix: Directory path to search.
+            pattern: Optional glob pattern for filtering (e.g., "*.parquet").
+                Supports ** for recursive matching.
+
+        Returns:
+            List of full paths for matching files, sorted alphabetically.
+
+        Raises:
+            StorageNotFoundError: If the prefix directory does not exist.
+        """
+        base = Path(prefix)
+
+        if not base.exists():
+            raise StorageNotFoundError(
+                f"Directory not found: {prefix}",
+                source=prefix,
+            )
+
+        matches = base.glob(pattern) if pattern else base.iterdir()
+
+        # Filter to files only and sort
+        return sorted(str(p) for p in matches if p.is_file())
