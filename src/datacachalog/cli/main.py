@@ -312,6 +312,44 @@ def status(
             typer.echo(f"{catalog_name}/{ds_name}: {state}")
 
 
+@app.command()
+def invalidate(
+    name: str = typer.Argument(help="Name of the dataset to invalidate."),
+) -> None:
+    """Remove dataset from cache, forcing re-download on next fetch."""
+    from datacachalog import Catalog, DatasetNotFoundError
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        datasets, cat_cache_dir = load_catalog(catalog_path)
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    try:
+        cat.get_dataset(name)  # Validate exists
+        cat.invalidate(name)
+        typer.echo(f"Invalidated '{name}'. Next fetch will re-download.")
+    except DatasetNotFoundError as e:
+        typer.echo(f"Dataset '{name}' not found.")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+
+
 def main() -> None:
     """Entry point for the CLI."""
     app()

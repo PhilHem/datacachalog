@@ -546,3 +546,64 @@ class TestCatalogStatus:
         assert result.exit_code == 0, f"Failed with: {result.output}"
         assert "customers" in result.output
         assert "metrics" not in result.output
+
+
+@pytest.mark.cli
+class TestCatalogInvalidate:
+    """Tests for catalog invalidate command."""
+
+    def test_invalidate_success(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate removes dataset from cache, forcing re-download."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # First fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Invalidate
+        result = runner.invoke(app, ["invalidate", "customers"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "invalidated" in result.output.lower()
+
+    def test_invalidate_nonexistent_dataset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate with unknown dataset shows error and hint."""
+        # Create catalog with no datasets
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["invalidate", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
