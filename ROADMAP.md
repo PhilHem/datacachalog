@@ -76,6 +76,40 @@ Resolved design questions that inform future implementation:
 - [ ] Staleness check per-file (only download changed files)
 - [ ] Cache path derivation for glob matches (preserve relative structure)
 
+## Phase 10: S3 Version Tracking
+
+Access historical versions of objects in versioned S3 buckets, with date-based selection.
+
+### Core
+
+- [ ] `ObjectVersion` model (last_modified, version_id, etag, size, is_latest, is_delete_marker)
+- [ ] Extend `StoragePort` with `list_versions()`, `download_version()`, `head_version()`
+- [ ] Version resolution: `as_of=datetime` finds closest version at or before that time
+- [ ] Version-aware cache key strategy (date-based paths: `2024-12-14T093000.parquet`)
+
+### S3 Adapter
+
+- [ ] `list_versions()` via `list_object_versions()`, sorted by `last_modified` descending
+- [ ] `download_version()` with `VersionId` parameter
+- [ ] Handle delete markers gracefully (skip or raise clear error)
+
+### Filesystem Adapter
+
+- [ ] Raise `VersioningNotSupportedError` for version methods
+
+### Library API
+
+- [ ] `catalog.versions(name, limit=10) -> list[ObjectVersion]`
+- [ ] `catalog.fetch(name, as_of=datetime)` - fetch version at point in time
+- [ ] `catalog.fetch(name, version_id=str)` - fetch specific version (escape hatch)
+
+### CLI
+
+- [ ] `catalog versions <dataset>` - list available versions with dates, sizes
+- [ ] `catalog versions <dataset> --limit=N` - control number shown
+- [ ] `catalog fetch <dataset> --as-of=2024-12-10` - fetch version from date
+- [ ] Human-friendly output: date as primary identifier, version_id hidden
+
 ## Future
 
 - Graceful network failure handling (warn and use stale cache if available, raise only if no cache)
