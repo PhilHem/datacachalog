@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-12-14
+
+### Added
+
+- **Glob Pattern Support** - Multi-file datasets with wildcard patterns
+  - Use glob patterns in `source` field (e.g., `s3://bucket/data/*.parquet`)
+  - `fetch()` returns `list[Path]` for glob datasets
+  - Parallel download of all matched files
+  - Per-file staleness detection (only re-download changed files)
+  - Cache path derivation preserves relative structure from glob matches
+
 ## [0.4.0] - 2025-12-14
 
 ### Added
@@ -60,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
 - Port definitions: `StoragePort`, `CachePort`
 
+[0.5.0]: https://github.com/PhilHem/datacachalog/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PhilHem/datacachalog/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/PhilHem/datacachalog/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PhilHem/datacachalog/compare/v0.1.1...v0.2.0
