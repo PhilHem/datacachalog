@@ -126,6 +126,55 @@ def init(
             typer.echo(f"Created {d.relative_to(target)}/")
 
 
+@app.command()
+def fetch(
+    name: str = typer.Argument(..., help="Name of the dataset to fetch."),
+    catalog: str | None = typer.Option(
+        None,
+        "--catalog",
+        "-c",
+        help="Fetch from a specific catalog only.",
+    ),
+) -> None:
+    """Fetch a dataset, downloading if stale."""
+    from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    # Filter to specific catalog if requested
+    if catalog:
+        if catalog not in catalogs:
+            typer.echo(f"Catalog '{catalog}' not found.")
+            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
+            raise typer.Exit(1)
+        catalogs = {catalog: catalogs[catalog]}
+
+    # Load all datasets
+    all_datasets = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        datasets, cat_cache_dir = load_catalog(catalog_path)
+        all_datasets.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    # Create catalog and fetch
+    cat = Catalog.from_directory(all_datasets, directory=root, cache_dir=cache_dir)
+
+    try:
+        with RichProgressReporter() as progress:
+            path = cat.fetch(name, progress=progress)
+        typer.echo(str(path))
+    except DatasetNotFoundError as e:
+        typer.echo(f"Dataset '{name}' not found.")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+
+
 @app.command(name="list")
 def list_datasets(
     catalog: str | None = typer.Option(

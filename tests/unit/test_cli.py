@@ -185,3 +185,134 @@ class TestCatalogList:
         result = runner.invoke(app, ["list"])
 
         assert "init" in result.output.lower()
+
+
+@pytest.mark.cli
+class TestCatalogFetch:
+    """Tests for catalog fetch command."""
+
+    def test_fetch_returns_cached_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch downloads dataset and outputs the cached path."""
+        # Create source file (simulates remote storage)
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog with dataset pointing to source file
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        # Create data directory for cache
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["fetch", "customers"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Output should contain the path to cached file
+        assert "data" in result.output
+
+    def test_fetch_dataset_not_found_exits_with_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch with unknown dataset name shows error and exits 1."""
+        # Create empty catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["fetch", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_fetch_with_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch --catalog X fetches from that specific catalog."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create two catalogs
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="s3://nonexistent/metrics.parquet"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch from core catalog specifically
+        result = runner.invoke(app, ["fetch", "customers", "--catalog", "core"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "data" in result.output
+
+    def test_fetch_with_progress_does_not_crash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch displays progress without crashing (progress is opt-in)."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch should work with progress enabled (Rich may not render in test runner)
+        result = runner.invoke(app, ["fetch", "customers"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"

@@ -62,7 +62,7 @@ Resolved design questions that inform future implementation:
 - [x] `catalog init` - scaffold project structure (`.datacachalog/catalogs/`, `data/` dirs)
 - [x] `catalog list` - show registered datasets (with `--catalog` filter)
 - [x] Catalog discovery (`discover_catalogs`, `load_catalog` from `.datacachalog/catalogs/*.py`)
-- [ ] `catalog fetch <name>` - fetch single dataset
+- [x] `catalog fetch <name>` - fetch single dataset
 - [ ] `catalog fetch --all` - fetch all datasets
 - [ ] `catalog status` - show cache state (cached/stale/missing) per dataset
 - [ ] `catalog invalidate <name>` - force re-download on next fetch
