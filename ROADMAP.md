@@ -47,6 +47,14 @@
 - [x] `Dataset.with_resolved_paths(root)` - resolve relative cache_path against project root
 - [x] `Catalog.from_directory()` factory - auto-discover root and create with sensible defaults
 
+## Phase 7: Design Decisions
+
+Resolved design questions that inform future implementation:
+
+- [x] **Write Path Cache Semantics**: Copy to cache location (user retains original, cache owns its files for safe eviction)
+- [x] **Post-Push Authority**: Remote is authoritative (cache stores remote ETag after push, so next fetch skips download if unchanged)
+- [x] **Credentials**: boto3's full credential chain (adapter delegates to boto3 defaults, with optional client injection for custom auth)
+
 ## Future
 
 - Graceful network failure handling (warn and use stale cache if available, raise only if no cache)
@@ -56,25 +64,3 @@
 - Retry logic for transient failures
 - Cache eviction policies (LRU, max size)
 - Async API variant
-
----
-
-## Open Design Questions
-
-Decisions needed before or during implementation:
-
-### Write Path Cache Semantics
-After `catalog.push("name", local_path=...)`:
-- [ ] `local_path` becomes the cache entry (move/link)
-- [ ] `local_path` is copied to cache location
-
-### Post-Push Authority
-After push, is remote authoritative?
-- [ ] Yes - next fetch pulls from S3, ignores what you just pushed
-- [ ] No - local file is trusted until remote changes
-
-### Credentials
-S3 authentication strategy:
-- [ ] Environment variables only (AWS_*)
-- [ ] Explicit credentials in code
-- [ ] boto3's full credential chain (env, ~/.aws, IAM role, etc.)
