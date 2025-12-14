@@ -1,6 +1,6 @@
 [project]
 name = "datacachalog"
-version = "0.3.0"
+version = "0.4.0"
 description = "A data catalog with file-based caching for remote storage"
 readme = "README.md"
 license = { text = "MIT" }
