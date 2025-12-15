@@ -103,6 +103,9 @@ def test_class_satisfies_cache_port():
         def invalidate(self, key: str) -> None:
             pass
 
+        def invalidate_prefix(self, prefix: str) -> int:
+            return 0
+
     cache: CachePort = FakeCache()
     assert isinstance(cache, CachePort)
 

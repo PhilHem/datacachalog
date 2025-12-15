@@ -280,6 +280,31 @@ class Catalog:
         """
         self._cache.invalidate(name)
 
+    def invalidate_glob(self, name: str) -> int:
+        """Remove all cached files for a glob pattern dataset.
+
+        For glob datasets, each matched file is cached separately under
+        a hierarchical key like "{name}/filename.ext". This method removes
+        all such entries.
+
+        Args:
+            name: The dataset name.
+
+        Returns:
+            Number of cache entries removed.
+
+        Raises:
+            DatasetNotFoundError: If no dataset with that name exists.
+            ValueError: If the dataset is not a glob pattern.
+        """
+        dataset = self.get_dataset(name)
+        if not is_glob_pattern(dataset.source):
+            raise ValueError(
+                f"Dataset '{name}' is not a glob pattern. "
+                "Use invalidate() for single-file datasets."
+            )
+        return self._cache.invalidate_prefix(name)
+
     def push(
         self,
         name: str,

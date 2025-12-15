@@ -75,6 +75,21 @@ class CachePort(Protocol):
         """Remove a file from cache."""
         ...
 
+    def invalidate_prefix(self, prefix: str) -> int:
+        """Remove all cache entries with keys starting with prefix.
+
+        Used to invalidate all cached files for a glob pattern dataset.
+        For example, invalidate_prefix("logs") removes all entries like
+        "logs/2024-01.parquet", "logs/2024-02.parquet", etc.
+
+        Args:
+            prefix: The key prefix to match (typically the dataset name).
+
+        Returns:
+            Number of entries removed.
+        """
+        ...
+
 
 @runtime_checkable
 class ProgressReporter(Protocol):

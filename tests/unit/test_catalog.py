@@ -455,6 +455,148 @@ class TestInvalidate:
 
 
 @pytest.mark.core
+class TestInvalidateGlob:
+    """Tests for invalidate_glob() method."""
+
+    def test_invalidate_glob_clears_all_cached_files(self, tmp_path: Path) -> None:
+        """invalidate_glob() should remove all cached files for a glob dataset."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create multiple files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "2024-01.parquet").write_text("jan")
+        (storage_dir / "2024-02.parquet").write_text("feb")
+        (storage_dir / "2024-03.parquet").write_text("mar")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="monthly_data",
+            source=str(storage_dir / "*.parquet"),
+        )
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Fetch to populate cache
+        catalog.fetch("monthly_data")
+
+        # Invalidate
+        catalog.invalidate_glob("monthly_data")
+
+        # Assert: all cache entries cleared (cache.get returns None)
+        assert cache.get("monthly_data/2024-01.parquet") is None
+        assert cache.get("monthly_data/2024-02.parquet") is None
+        assert cache.get("monthly_data/2024-03.parquet") is None
+
+    def test_invalidate_glob_returns_count(self, tmp_path: Path) -> None:
+        """invalidate_glob() should return count of deleted entries."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "a.txt").write_text("a")
+        (storage_dir / "b.txt").write_text("b")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="files", source=str(storage_dir / "*.txt"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        catalog.fetch("files")
+
+        # Act
+        count = catalog.invalidate_glob("files")
+
+        # Assert
+        assert count == 2
+
+    def test_invalidate_glob_forces_redownload(self, tmp_path: Path) -> None:
+        """invalidate_glob() should force re-download on next fetch."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "data.txt").write_text("original")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="data", source=str(storage_dir / "*.txt"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Fetch and modify cached file
+        paths = catalog.fetch("data")
+        paths[0].write_text("MODIFIED")
+
+        # Invalidate
+        catalog.invalidate_glob("data")
+
+        # Update source file
+        (storage_dir / "data.txt").write_text("updated")
+
+        # Fetch again - should get updated content
+        paths2 = catalog.fetch("data")
+        assert paths2[0].read_text() == "updated"
+
+    def test_invalidate_glob_on_non_glob_dataset_raises(self, tmp_path: Path) -> None:
+        """invalidate_glob() should raise ValueError for non-glob datasets."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "data.txt").write_text("content")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        # Non-glob dataset (no wildcards)
+        dataset = Dataset(
+            name="single_file",
+            source=str(storage_dir / "data.txt"),
+        )
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        with pytest.raises(ValueError, match="not a glob pattern"):
+            catalog.invalidate_glob("single_file")
+
+
+@pytest.mark.core
 class TestFetchWithProgress:
     """Tests for fetch() with progress reporting."""
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from datetime import datetime
-from pathlib import Path  # noqa: TC003 - used at runtime, not just type hints
+from pathlib import Path
 
 from datacachalog.core.exceptions import CacheCorruptError
 from datacachalog.core.models import CacheMetadata
@@ -119,3 +119,52 @@ class FileCache:
 
         file_path.unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)
+
+    def invalidate_prefix(self, prefix: str) -> int:
+        """Remove all cache entries with keys starting with prefix.
+
+        Used to invalidate all cached files for a glob pattern dataset.
+        For example, invalidate_prefix("logs") removes all entries like
+        "logs/2024-01.parquet", "logs/2024-02.parquet", etc.
+
+        Args:
+            prefix: The key prefix to match (typically the dataset name).
+
+        Returns:
+            Number of entries removed.
+        """
+        prefix_dir = self.cache_dir / prefix
+        if not prefix_dir.exists():
+            return 0
+
+        # Find all metadata files under the prefix directory
+        meta_files = list(prefix_dir.rglob("*.meta.json"))
+        count = 0
+
+        for meta_path in meta_files:
+            # The data file path is the meta path without ".meta.json" suffix
+            meta_str = str(meta_path)
+            if meta_str.endswith(".meta.json"):
+                data_path = Path(meta_str[:-10])  # Remove ".meta.json" (10 chars)
+            else:
+                continue  # Skip non-meta files
+
+            data_path.unlink(missing_ok=True)
+            meta_path.unlink(missing_ok=True)
+            count += 1
+
+        # Clean up empty directories
+        self._cleanup_empty_dirs(prefix_dir)
+
+        return count
+
+    def _cleanup_empty_dirs(self, path: Path) -> None:
+        """Remove empty directories recursively up to cache_dir."""
+        try:
+            while path != self.cache_dir and path.is_dir():
+                if any(path.iterdir()):
+                    break  # Directory not empty
+                path.rmdir()
+                path = path.parent
+        except OSError:
+            pass  # Directory not empty or other issue, ignore

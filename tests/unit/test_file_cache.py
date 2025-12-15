@@ -115,6 +115,88 @@ class TestInvalidate:
 
 
 @pytest.mark.cache
+class TestInvalidatePrefix:
+    """Tests for invalidate_prefix() method."""
+
+    def test_invalidate_prefix_removes_matching_files(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should remove all files with matching prefix."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        # Create multiple cache entries under same prefix
+        cache.put("logs/2024-01.parquet", source, CacheMetadata(etag='"a"'))
+        cache.put("logs/2024-02.parquet", source, CacheMetadata(etag='"b"'))
+        cache.put("logs/2024-03.parquet", source, CacheMetadata(etag='"c"'))
+
+        cache.invalidate_prefix("logs")
+
+        assert cache.get("logs/2024-01.parquet") is None
+        assert cache.get("logs/2024-02.parquet") is None
+        assert cache.get("logs/2024-03.parquet") is None
+
+    def test_invalidate_prefix_returns_count(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should return count of deleted entries."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("logs/a.txt", source, CacheMetadata(etag='"a"'))
+        cache.put("logs/b.txt", source, CacheMetadata(etag='"b"'))
+
+        count = cache.invalidate_prefix("logs")
+
+        assert count == 2
+
+    def test_invalidate_prefix_preserves_other_files(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should not remove files with different prefix."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("logs/file.txt", source, CacheMetadata(etag='"a"'))
+        cache.put("other/file.txt", source, CacheMetadata(etag='"b"'))
+
+        cache.invalidate_prefix("logs")
+
+        assert cache.get("logs/file.txt") is None
+        assert cache.get("other/file.txt") is not None
+
+    def test_invalidate_prefix_handles_no_matches(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should return 0 when no files match."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        count = cache.invalidate_prefix("nonexistent")
+
+        assert count == 0
+
+    def test_invalidate_prefix_handles_nested_directories(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should remove files in nested directories."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("logs/2024/01/data.parquet", source, CacheMetadata(etag='"a"'))
+        cache.put("logs/2024/02/data.parquet", source, CacheMetadata(etag='"b"'))
+
+        count = cache.invalidate_prefix("logs")
+
+        assert count == 2
+        assert cache.get("logs/2024/01/data.parquet") is None
+        assert cache.get("logs/2024/02/data.parquet") is None
+
+
+@pytest.mark.cache
 class TestProtocolConformance:
     """Tests for CachePort protocol conformance."""
 
