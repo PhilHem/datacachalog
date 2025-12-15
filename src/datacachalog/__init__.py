@@ -32,8 +32,9 @@ from datacachalog.core.exceptions import (
     StorageAccessError,
     StorageError,
     StorageNotFoundError,
+    VersioningNotSupportedError,
 )
-from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
+from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata, ObjectVersion
 from datacachalog.core.ports import (
     CachePort,
     NullProgressReporter,
@@ -64,6 +65,7 @@ __all__ = [
     "FileMetadata",
     "FilesystemStorage",
     "NullProgressReporter",
+    "ObjectVersion",
     "ProgressCallback",
     "ProgressReporter",
     "RichProgressReporter",
@@ -73,6 +75,7 @@ __all__ = [
     "StorageError",
     "StorageNotFoundError",
     "StoragePort",
+    "VersioningNotSupportedError",
     "__version__",
     "create_router",
     "discover_catalogs",

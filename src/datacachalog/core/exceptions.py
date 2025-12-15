@@ -86,6 +86,26 @@ class StorageAccessError(StorageError):
         return "Check credentials and bucket/path permissions"
 
 
+class VersioningNotSupportedError(StorageError):
+    """Raised when versioning operations are attempted on non-versioned storage.
+
+    Attributes:
+        adapter: The name of the storage adapter that doesn't support versioning.
+    """
+
+    def __init__(self, adapter: str) -> None:
+        self.adapter = adapter
+        super().__init__(
+            message=f"Versioning not supported by {adapter} adapter",
+            source="",
+        )
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest using S3 with versioning enabled."""
+        return "Use S3 storage with versioning enabled for version operations."
+
+
 class CacheError(DatacachalogError):
     """Base class for cache-related errors."""
 

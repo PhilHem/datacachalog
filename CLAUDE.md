@@ -361,6 +361,8 @@ The hooks use the same commands as CI, maintaining parity between local developm
 
 **Typer gotcha**: When a Typer app has only one command, positional arguments don't work correctly (the app runs in "single command mode"). Always ensure the app has at least two commands registered.
 
+**`list` method naming gotcha**: When a class has a method named `list`, using `list[T]` in return type annotations is interpreted as calling the method at runtime (due to PEP 563 deferred evaluation). Use `builtins.list[T]` instead, with `import builtins` inside `if TYPE_CHECKING:` block. This affects `StoragePort.list()` and adapter implementations.
+
 ## Goals & Non-Goals
 
 ### Goals

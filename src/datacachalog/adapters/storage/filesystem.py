@@ -1,12 +1,23 @@
 """Filesystem storage adapter for local file operations."""
 
+from __future__ import annotations
+
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from datacachalog.core.exceptions import StorageNotFoundError
-from datacachalog.core.models import FileMetadata
-from datacachalog.core.ports import ProgressCallback
+from datacachalog.core.exceptions import (
+    StorageNotFoundError,
+    VersioningNotSupportedError,
+)
+from datacachalog.core.models import FileMetadata, ObjectVersion
+
+
+if TYPE_CHECKING:
+    import builtins
+
+    from datacachalog.core.ports import ProgressCallback
 
 
 # Chunk size for reading files (64KB)
@@ -135,3 +146,37 @@ class FilesystemStorage:
 
         # Filter to files only and sort
         return sorted(str(p) for p in matches if p.is_file())
+
+    def list_versions(
+        self,
+        source: str,  # noqa: ARG002
+        limit: int | None = None,  # noqa: ARG002
+    ) -> builtins.list[ObjectVersion]:
+        """List versions is not supported for filesystem storage.
+
+        Raises:
+            VersioningNotSupportedError: Always, as filesystem doesn't support versioning.
+        """
+        raise VersioningNotSupportedError(adapter="filesystem")
+
+    def head_version(self, source: str, version_id: str) -> FileMetadata:  # noqa: ARG002
+        """Head version is not supported for filesystem storage.
+
+        Raises:
+            VersioningNotSupportedError: Always, as filesystem doesn't support versioning.
+        """
+        raise VersioningNotSupportedError(adapter="filesystem")
+
+    def download_version(
+        self,
+        source: str,  # noqa: ARG002
+        dest: Path,  # noqa: ARG002
+        version_id: str,  # noqa: ARG002
+        progress: ProgressCallback,  # noqa: ARG002
+    ) -> None:
+        """Download version is not supported for filesystem storage.
+
+        Raises:
+            VersioningNotSupportedError: Always, as filesystem doesn't support versioning.
+        """
+        raise VersioningNotSupportedError(adapter="filesystem")

@@ -20,6 +20,20 @@ def s3_client():
         yield client
 
 
+@pytest.fixture
+def versioned_s3_client():
+    """Create a mocked S3 client with a versioned bucket."""
+    with mock_aws():
+        client = boto3.client("s3", region_name="us-east-1")
+        client.create_bucket(Bucket="versioned-bucket")
+        # Enable versioning on the bucket
+        client.put_bucket_versioning(
+            Bucket="versioned-bucket",
+            VersioningConfiguration={"Status": "Enabled"},
+        )
+        yield client
+
+
 @pytest.mark.storage
 class TestHead:
     """Tests for head() method."""
@@ -327,3 +341,233 @@ class TestPackageExport:
         from datacachalog import S3Storage
 
         assert S3Storage is not None
+
+
+@pytest.mark.storage
+class TestListVersions:
+    """Tests for list_versions() method."""
+
+    def test_list_versions_returns_object_versions(self, versioned_s3_client) -> None:
+        """list_versions() should return list of ObjectVersion."""
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.models import ObjectVersion
+
+        # Upload multiple versions
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"v1"
+        )
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"v2"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt")
+
+        assert len(versions) == 2
+        assert all(isinstance(v, ObjectVersion) for v in versions)
+
+    def test_list_versions_sorted_newest_first(self, versioned_s3_client) -> None:
+        """list_versions() should return newest version first."""
+        from datacachalog.adapters.storage import S3Storage
+
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"v1"
+        )
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"v2"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt")
+
+        # First version should be latest
+        assert versions[0].is_latest is True
+        # Newer version should come first
+        assert versions[0].last_modified >= versions[1].last_modified
+
+    def test_list_versions_with_limit(self, versioned_s3_client) -> None:
+        """list_versions() should respect limit parameter."""
+        from datacachalog.adapters.storage import S3Storage
+
+        # Upload 5 versions
+        for i in range(5):
+            versioned_s3_client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=f"v{i}".encode()
+            )
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt", limit=3)
+
+        assert len(versions) == 3
+
+    def test_list_versions_includes_version_id(self, versioned_s3_client) -> None:
+        """list_versions() should include version_id for each version."""
+        from datacachalog.adapters.storage import S3Storage
+
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt")
+
+        assert len(versions) == 1
+        assert versions[0].version_id is not None
+
+    def test_list_versions_includes_metadata(self, versioned_s3_client) -> None:
+        """list_versions() should include etag and size."""
+        from datacachalog.adapters.storage import S3Storage
+
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"hello"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt")
+
+        assert versions[0].etag is not None
+        assert versions[0].size == 5
+
+    def test_list_versions_handles_delete_markers(self, versioned_s3_client) -> None:
+        """list_versions() should include delete markers."""
+        from datacachalog.adapters.storage import S3Storage
+
+        # Create object and then delete it (creates delete marker)
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+        )
+        versioned_s3_client.delete_object(Bucket="versioned-bucket", Key="data.txt")
+
+        storage = S3Storage(client=versioned_s3_client)
+        versions = storage.list_versions("s3://versioned-bucket/data.txt")
+
+        # Should have delete marker and original version
+        assert len(versions) == 2
+        # One should be a delete marker
+        delete_markers = [v for v in versions if v.is_delete_marker]
+        assert len(delete_markers) == 1
+
+
+@pytest.mark.storage
+class TestHeadVersion:
+    """Tests for head_version() method."""
+
+    def test_head_version_returns_file_metadata(self, versioned_s3_client) -> None:
+        """head_version() should return FileMetadata for specific version."""
+        from datacachalog.adapters.storage import S3Storage
+
+        # Upload two versions
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"v1"
+        )
+        resp = versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"version2"
+        )
+        version_id = resp["VersionId"]
+
+        storage = S3Storage(client=versioned_s3_client)
+        metadata = storage.head_version("s3://versioned-bucket/data.txt", version_id)
+
+        assert isinstance(metadata, FileMetadata)
+        assert metadata.etag is not None
+        assert metadata.size == 8  # "version2" is 8 bytes
+
+    def test_head_version_not_found_raises_error(self, versioned_s3_client) -> None:
+        """head_version() should raise StorageNotFoundError for missing version."""
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.exceptions import StorageNotFoundError
+
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+
+        with pytest.raises(StorageNotFoundError):
+            storage.head_version(
+                "s3://versioned-bucket/data.txt", "nonexistent-version-id"
+            )
+
+
+@pytest.mark.storage
+class TestDownloadVersion:
+    """Tests for download_version() method."""
+
+    def test_download_version_downloads_specific_version(
+        self, versioned_s3_client, tmp_path: Path
+    ) -> None:
+        """download_version() should download specific version content."""
+        from datacachalog.adapters.storage import S3Storage
+
+        # Upload two versions
+        resp1 = versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"first version"
+        )
+        v1_id = resp1["VersionId"]
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"second version"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        dest = tmp_path / "downloaded.txt"
+
+        # Download the first version (not the latest)
+        storage.download_version(
+            "s3://versioned-bucket/data.txt",
+            dest,
+            v1_id,
+            progress=lambda x, y: None,
+        )
+
+        assert dest.exists()
+        assert dest.read_text() == "first version"
+
+    def test_download_version_reports_progress(
+        self, versioned_s3_client, tmp_path: Path
+    ) -> None:
+        """download_version() should call progress callback."""
+        from datacachalog.adapters.storage import S3Storage
+
+        resp = versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"x" * 1000
+        )
+        version_id = resp["VersionId"]
+
+        progress_calls: list[tuple[int, int]] = []
+
+        def track_progress(downloaded: int, total: int) -> None:
+            progress_calls.append((downloaded, total))
+
+        storage = S3Storage(client=versioned_s3_client)
+        dest = tmp_path / "downloaded.txt"
+        storage.download_version(
+            "s3://versioned-bucket/data.txt",
+            dest,
+            version_id,
+            progress=track_progress,
+        )
+
+        assert len(progress_calls) > 0
+        assert progress_calls[-1][0] == 1000
+
+    def test_download_version_not_found_raises_error(
+        self, versioned_s3_client, tmp_path: Path
+    ) -> None:
+        """download_version() should raise StorageNotFoundError for missing version."""
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.exceptions import StorageNotFoundError
+
+        versioned_s3_client.put_object(
+            Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+        )
+
+        storage = S3Storage(client=versioned_s3_client)
+        dest = tmp_path / "downloaded.txt"
+
+        with pytest.raises(StorageNotFoundError):
+            storage.download_version(
+                "s3://versioned-bucket/data.txt",
+                dest,
+                "nonexistent-version-id",
+                progress=lambda x, y: None,
+            )

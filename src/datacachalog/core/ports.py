@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 
 if TYPE_CHECKING:
+    import builtins
     from pathlib import Path
 
-    from datacachalog.core.models import CacheMetadata, FileMetadata
+    from datacachalog.core.models import CacheMetadata, FileMetadata, ObjectVersion
 
 ProgressCallback = Callable[[int, int], None]
 
@@ -55,6 +56,61 @@ class StoragePort(Protocol):
 
         Raises:
             StorageNotFoundError: If the prefix path does not exist.
+        """
+        ...
+
+    def list_versions(
+        self, source: str, limit: int | None = None
+    ) -> builtins.list[ObjectVersion]:
+        """List all versions of an object, newest first.
+
+        Args:
+            source: Remote storage URI (e.g., "s3://bucket/path/to/file.parquet").
+            limit: Maximum number of versions to return. If None, returns all.
+
+        Returns:
+            List of ObjectVersion sorted by last_modified descending (newest first).
+
+        Raises:
+            VersioningNotSupportedError: If storage doesn't support versioning.
+            StorageNotFoundError: If the object has never existed.
+        """
+        ...
+
+    def head_version(self, source: str, version_id: str) -> FileMetadata:
+        """Get metadata for a specific version of an object.
+
+        Args:
+            source: Remote storage URI.
+            version_id: The version identifier.
+
+        Returns:
+            FileMetadata for the specified version.
+
+        Raises:
+            VersioningNotSupportedError: If storage doesn't support versioning.
+            StorageNotFoundError: If the version does not exist.
+        """
+        ...
+
+    def download_version(
+        self,
+        source: str,
+        dest: Path,
+        version_id: str,
+        progress: ProgressCallback,
+    ) -> None:
+        """Download a specific version of an object.
+
+        Args:
+            source: Remote storage URI.
+            dest: Local path to download to.
+            version_id: The version identifier.
+            progress: Callback function(bytes_downloaded, total_bytes).
+
+        Raises:
+            VersioningNotSupportedError: If storage doesn't support versioning.
+            StorageNotFoundError: If the version does not exist.
         """
         ...
 

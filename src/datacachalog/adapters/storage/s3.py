@@ -14,10 +14,11 @@ from datacachalog.core.exceptions import (
     StorageError,
     StorageNotFoundError,
 )
-from datacachalog.core.models import FileMetadata
+from datacachalog.core.models import FileMetadata, ObjectVersion
 
 
 if TYPE_CHECKING:
+    import builtins
     from pathlib import Path
 
     from mypy_boto3_s3 import S3Client
@@ -168,6 +169,122 @@ class S3Storage:
 
         return sorted(results)
 
+    def list_versions(
+        self, source: str, limit: int | None = None
+    ) -> builtins.list[ObjectVersion]:
+        """List all versions of an S3 object, newest first.
+
+        Args:
+            source: S3 URI (s3://bucket/key).
+            limit: Maximum number of versions to return. If None, returns all.
+
+        Returns:
+            List of ObjectVersion sorted by last_modified descending (newest first).
+        """
+        bucket, key = self._parse_s3_uri(source)
+
+        versions: builtins.list[ObjectVersion] = []
+        paginator = self._client.get_paginator("list_object_versions")
+
+        for page in paginator.paginate(Bucket=bucket, Prefix=key):
+            # Process regular versions
+            for v in page.get("Versions", []):
+                if v["Key"] == key:  # Exact match only
+                    versions.append(
+                        ObjectVersion(
+                            version_id=v["VersionId"],
+                            last_modified=v["LastModified"],
+                            etag=v["ETag"],
+                            size=v["Size"],
+                            is_latest=v["IsLatest"],
+                            is_delete_marker=False,
+                        )
+                    )
+
+            # Process delete markers
+            for dm in page.get("DeleteMarkers", []):
+                if dm["Key"] == key:  # Exact match only
+                    versions.append(
+                        ObjectVersion(
+                            version_id=dm["VersionId"],
+                            last_modified=dm["LastModified"],
+                            is_latest=dm["IsLatest"],
+                            is_delete_marker=True,
+                        )
+                    )
+
+        # Sort newest first and apply limit
+        versions.sort(reverse=True)
+        return versions[:limit] if limit else versions
+
+    def head_version(self, source: str, version_id: str) -> FileMetadata:
+        """Get metadata for a specific version of an S3 object.
+
+        Args:
+            source: S3 URI (s3://bucket/key).
+            version_id: The version identifier.
+
+        Returns:
+            FileMetadata for the specified version.
+
+        Raises:
+            StorageNotFoundError: If the version does not exist.
+            StorageAccessError: If access is denied.
+            StorageError: For other S3 errors.
+        """
+        bucket, key = self._parse_s3_uri(source)
+        try:
+            response = self._client.head_object(
+                Bucket=bucket, Key=key, VersionId=version_id
+            )
+        except ClientError as e:
+            raise self._translate_client_error(e, source) from e
+
+        return FileMetadata(
+            etag=response["ETag"],
+            last_modified=response["LastModified"],
+            size=response["ContentLength"],
+        )
+
+    def download_version(
+        self,
+        source: str,
+        dest: Path,
+        version_id: str,
+        progress: ProgressCallback,
+    ) -> None:
+        """Download a specific version of an S3 object.
+
+        Args:
+            source: S3 URI (s3://bucket/key).
+            dest: Local destination path.
+            version_id: The version identifier.
+            progress: Callback function(bytes_downloaded, total_bytes).
+
+        Raises:
+            StorageNotFoundError: If the version does not exist.
+            StorageAccessError: If access is denied.
+            StorageError: For other S3 errors.
+        """
+        bucket, key = self._parse_s3_uri(source)
+
+        try:
+            response = self._client.get_object(
+                Bucket=bucket, Key=key, VersionId=version_id
+            )
+        except ClientError as e:
+            raise self._translate_client_error(e, source) from e
+
+        total_size = response["ContentLength"]
+        body = response["Body"]
+
+        bytes_downloaded = 0
+        with dest.open("wb") as f:
+            for chunk in iter(lambda: body.read(_CHUNK_SIZE), b""):
+                f.write(chunk)
+                bytes_downloaded += len(chunk)
+                progress(bytes_downloaded, total_size)
+
     def _parse_s3_uri_prefix(self, uri: str) -> tuple[str, str]:
         """Parse an S3 URI prefix into bucket and key prefix.
 
@@ -231,7 +348,7 @@ class S3Storage:
         code = error.response.get("Error", {}).get("Code", "")
 
         # Not found errors
-        if code in ("404", "NoSuchKey", "NoSuchBucket"):
+        if code in ("404", "NoSuchKey", "NoSuchBucket", "NoSuchVersion"):
             return StorageNotFoundError(
                 f"Object not found: {source}",
                 source=source,

@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
+    import builtins
     from pathlib import Path
 
-    from datacachalog.core.models import FileMetadata
+    from datacachalog.core.models import FileMetadata, ObjectVersion
     from datacachalog.core.ports import ProgressCallback, StoragePort
 
 
@@ -91,6 +92,29 @@ class RouterStorage:
         """List files by delegating to appropriate backend."""
         backend, path = self._get_backend_and_path(prefix)
         return backend.list(path, pattern)
+
+    def list_versions(
+        self, source: str, limit: int | None = None
+    ) -> builtins.list[ObjectVersion]:
+        """List versions by delegating to appropriate backend."""
+        backend, path = self._get_backend_and_path(source)
+        return backend.list_versions(path, limit)
+
+    def head_version(self, source: str, version_id: str) -> FileMetadata:
+        """Get version metadata by delegating to appropriate backend."""
+        backend, path = self._get_backend_and_path(source)
+        return backend.head_version(path, version_id)
+
+    def download_version(
+        self,
+        source: str,
+        dest: Path,
+        version_id: str,
+        progress: ProgressCallback,
+    ) -> None:
+        """Download specific version by delegating to appropriate backend."""
+        backend, path = self._get_backend_and_path(source)
+        backend.download_version(path, dest, version_id, progress)
 
 
 def create_router(s3_client: Any | None = None) -> RouterStorage:

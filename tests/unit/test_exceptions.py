@@ -292,3 +292,41 @@ class TestCatalogLoadError:
         hint = err.recovery_hint
         assert hint is not None
         assert "core.py" in hint
+
+
+@pytest.mark.core
+class TestVersioningNotSupportedError:
+    """Tests for VersioningNotSupportedError."""
+
+    def test_is_storage_error_subclass(self) -> None:
+        """VersioningNotSupportedError should inherit from StorageError."""
+        from datacachalog.core.exceptions import (
+            StorageError,
+            VersioningNotSupportedError,
+        )
+
+        assert issubclass(VersioningNotSupportedError, StorageError)
+
+    def test_stores_adapter_name(self) -> None:
+        """VersioningNotSupportedError should store the adapter name."""
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        err = VersioningNotSupportedError(adapter="filesystem")
+        assert err.adapter == "filesystem"
+
+    def test_message_includes_adapter_name(self) -> None:
+        """Exception message should include the adapter name."""
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        err = VersioningNotSupportedError(adapter="filesystem")
+        assert "filesystem" in str(err)
+
+    def test_recovery_hint_suggests_s3(self) -> None:
+        """recovery_hint should suggest using S3 with versioning."""
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        err = VersioningNotSupportedError(adapter="filesystem")
+        hint = err.recovery_hint
+        assert hint is not None
+        assert "S3" in hint or "s3" in hint
+        assert "version" in hint.lower()

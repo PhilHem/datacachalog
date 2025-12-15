@@ -175,3 +175,43 @@ class CacheMetadata:
             True if the cache is stale and should be re-downloaded.
         """
         return not self.to_file_metadata().matches(remote)
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectVersion:
+    """Metadata for a versioned object in storage.
+
+    Represents a single version of an object, as returned by S3's
+    ListObjectVersions API. Used for time-travel queries and version listing.
+
+    Attributes:
+        last_modified: When this version was created.
+        version_id: S3 version ID (None for non-versioned buckets).
+        etag: Object ETag for this version.
+        size: Object size in bytes.
+        is_latest: Whether this is the current/latest version.
+        is_delete_marker: Whether this version is a delete marker.
+    """
+
+    last_modified: datetime
+    version_id: str | None = None
+    etag: str | None = None
+    size: int | None = None
+    is_latest: bool = False
+    is_delete_marker: bool = False
+
+    def __lt__(self, other: Self) -> bool:
+        """Compare versions by last_modified for sorting."""
+        return self.last_modified < other.last_modified
+
+    def to_file_metadata(self) -> FileMetadata:
+        """Convert to FileMetadata for staleness comparison.
+
+        Returns:
+            A FileMetadata with the version's etag, last_modified, and size.
+        """
+        return FileMetadata(
+            etag=self.etag,
+            last_modified=self.last_modified,
+            size=self.size,
+        )

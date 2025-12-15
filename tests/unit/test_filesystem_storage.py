@@ -298,3 +298,55 @@ class TestProtocolConformance:
 
         storage = FilesystemStorage()
         assert isinstance(storage, StoragePort)
+
+
+@pytest.mark.storage
+class TestVersionMethods:
+    """Tests for version-related methods (not supported by filesystem)."""
+
+    def test_list_versions_raises_versioning_not_supported(
+        self, tmp_path: Path
+    ) -> None:
+        """list_versions() should raise VersioningNotSupportedError."""
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        source = tmp_path / "test.txt"
+        source.write_text("content")
+
+        storage = FilesystemStorage()
+
+        with pytest.raises(VersioningNotSupportedError) as exc_info:
+            storage.list_versions(str(source))
+
+        assert "filesystem" in str(exc_info.value)
+        assert exc_info.value.recovery_hint is not None
+
+    def test_head_version_raises_versioning_not_supported(self, tmp_path: Path) -> None:
+        """head_version() should raise VersioningNotSupportedError."""
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        source = tmp_path / "test.txt"
+        source.write_text("content")
+
+        storage = FilesystemStorage()
+
+        with pytest.raises(VersioningNotSupportedError):
+            storage.head_version(str(source), "v1")
+
+    def test_download_version_raises_versioning_not_supported(
+        self, tmp_path: Path
+    ) -> None:
+        """download_version() should raise VersioningNotSupportedError."""
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.exceptions import VersioningNotSupportedError
+
+        source = tmp_path / "test.txt"
+        dest = tmp_path / "dest.txt"
+        source.write_text("content")
+
+        storage = FilesystemStorage()
+
+        with pytest.raises(VersioningNotSupportedError):
+            storage.download_version(str(source), dest, "v1", lambda x, y: None)

@@ -85,20 +85,20 @@ Access historical versions of objects in versioned S3 buckets, with date-based s
 
 ### Core
 
-- [ ] `ObjectVersion` model (last_modified, version_id, etag, size, is_latest, is_delete_marker)
-- [ ] Extend `StoragePort` with `list_versions()`, `download_version()`, `head_version()`
+- [x] `ObjectVersion` model (last_modified, version_id, etag, size, is_latest, is_delete_marker)
+- [x] Extend `StoragePort` with `list_versions()`, `download_version()`, `head_version()`
 - [ ] Version resolution: `as_of=datetime` finds closest version at or before that time
 - [ ] Version-aware cache key strategy (date-based paths: `2024-12-14T093000.parquet`)
 
 ### S3 Adapter
 
-- [ ] `list_versions()` via `list_object_versions()`, sorted by `last_modified` descending
-- [ ] `download_version()` with `VersionId` parameter
-- [ ] Handle delete markers gracefully (skip or raise clear error)
+- [x] `list_versions()` via `list_object_versions()`, sorted by `last_modified` descending
+- [x] `download_version()` with `VersionId` parameter
+- [x] Handle delete markers gracefully (skip or raise clear error)
 
 ### Filesystem Adapter
 
-- [ ] Raise `VersioningNotSupportedError` for version methods
+- [x] Raise `VersioningNotSupportedError` for version methods
 
 ### Library API
 
@@ -121,3 +121,7 @@ Access historical versions of objects in versioned S3 buckets, with date-based s
 - Retry logic for transient failures
 - Cache eviction policies (LRU, max size)
 - Async API variant
+
+## Tech Debt
+
+- **FakeStorage test maintenance**: The `test_class_satisfies_storage_port` test in `test_ports.py` uses a `FakeStorage` class that must implement all `StoragePort` methods. When adding new methods to `StoragePort`, this test class must be updated or it will fail protocol conformance checks.

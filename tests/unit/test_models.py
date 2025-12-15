@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata
+from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata, ObjectVersion
 
 
 class TestDataset:
@@ -303,3 +303,87 @@ class TestCacheMetadata:
 
         with pytest.raises(AttributeError):
             meta.etag = "new"  # type: ignore[misc]
+
+
+class TestObjectVersion:
+    """Tests for the ObjectVersion model."""
+
+    @pytest.mark.core
+    def test_object_version_creation_full(self) -> None:
+        """ObjectVersion stores version metadata."""
+        version = ObjectVersion(
+            version_id="abc123",
+            last_modified=datetime(2024, 12, 14, 9, 30, 0),
+            etag='"xyz789"',
+            size=1024,
+            is_latest=True,
+            is_delete_marker=False,
+        )
+
+        assert version.version_id == "abc123"
+        assert version.last_modified == datetime(2024, 12, 14, 9, 30, 0)
+        assert version.etag == '"xyz789"'
+        assert version.size == 1024
+        assert version.is_latest is True
+        assert version.is_delete_marker is False
+
+    @pytest.mark.core
+    def test_object_version_minimal(self) -> None:
+        """ObjectVersion requires only last_modified."""
+        version = ObjectVersion(last_modified=datetime(2024, 12, 14))
+
+        assert version.version_id is None
+        assert version.etag is None
+        assert version.size is None
+        assert version.is_latest is False
+        assert version.is_delete_marker is False
+
+    @pytest.mark.core
+    def test_object_version_is_frozen(self) -> None:
+        """ObjectVersion is immutable."""
+        version = ObjectVersion(last_modified=datetime.now())
+
+        with pytest.raises(AttributeError):
+            version.is_latest = False  # type: ignore[misc]
+
+    @pytest.mark.core
+    def test_object_version_requires_last_modified(self) -> None:
+        """ObjectVersion must have last_modified."""
+        with pytest.raises(TypeError):
+            ObjectVersion()  # type: ignore[call-arg]
+
+    @pytest.mark.core
+    def test_object_versions_sort_by_last_modified(self) -> None:
+        """Versions sort by last_modified descending (newest first)."""
+        v1 = ObjectVersion(last_modified=datetime(2024, 12, 10))
+        v2 = ObjectVersion(last_modified=datetime(2024, 12, 14))
+        v3 = ObjectVersion(last_modified=datetime(2024, 12, 12))
+
+        versions = sorted([v1, v2, v3], reverse=True)
+
+        assert versions == [v2, v3, v1]
+
+    @pytest.mark.core
+    def test_object_version_to_file_metadata(self) -> None:
+        """ObjectVersion converts to FileMetadata for staleness checks."""
+        version = ObjectVersion(
+            last_modified=datetime(2024, 12, 14),
+            etag='"abc123"',
+            size=2048,
+        )
+
+        metadata = version.to_file_metadata()
+
+        assert metadata.etag == '"abc123"'
+        assert metadata.last_modified == datetime(2024, 12, 14)
+        assert metadata.size == 2048
+
+    @pytest.mark.core
+    def test_object_version_to_file_metadata_minimal(self) -> None:
+        """ObjectVersion with only last_modified converts to FileMetadata."""
+        version = ObjectVersion(last_modified=datetime(2024, 12, 14))
+
+        metadata = version.to_file_metadata()
+
+        assert metadata.last_modified == datetime(2024, 12, 14)
+        assert metadata.etag is None
