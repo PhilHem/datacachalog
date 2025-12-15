@@ -386,6 +386,52 @@ def invalidate(
         raise typer.Exit(1) from None
 
 
+@app.command("invalidate-glob")
+def invalidate_glob(
+    name: str = typer.Argument(help="Name of the glob dataset to invalidate."),
+) -> None:
+    """Remove all cached files for a glob pattern dataset."""
+    from datacachalog import Catalog, DatasetNotFoundError
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    try:
+        count = cat.invalidate_glob(name)
+        typer.echo(f"Invalidated '{name}': {count} cached file(s) removed.")
+    except DatasetNotFoundError as e:
+        typer.echo(f"Dataset '{name}' not found.")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+    except ValueError as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1) from None
+
+
 def main() -> None:
     """Entry point for the CLI."""
     app()

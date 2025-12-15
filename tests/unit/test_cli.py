@@ -697,3 +697,108 @@ class TestCatalogLoadErrors:
         assert result.exit_code == 1
         assert "error" in result.output.lower()
         assert "bad.py" in result.output
+
+
+@pytest.mark.cli
+class TestCatalogInvalidateGlob:
+    """Tests for catalog invalidate-glob command."""
+
+    def test_invalidate_glob_success(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate-glob removes all cached files for glob dataset."""
+        # Create multiple source files matching glob pattern
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "data_01.parquet").write_text("data1")
+        (storage_dir / "data_02.parquet").write_text("data2")
+
+        # Create catalog with glob dataset
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="logs", source="{storage_dir}/*.parquet"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "logs"])
+
+        # Invalidate glob
+        result = runner.invoke(app, ["invalidate-glob", "logs"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "invalidated" in result.output.lower()
+        assert "2" in result.output  # Should report count
+
+    def test_invalidate_glob_nonexistent_dataset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate-glob with unknown dataset shows error and hint."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["invalidate-glob", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_invalidate_glob_on_non_glob_dataset_shows_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate-glob on non-glob dataset shows helpful error."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "data.csv").write_text("id,name\n1,Alice\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "data.csv"}"),
+            ]
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["invalidate-glob", "customers"])
+
+        assert result.exit_code == 1
+        assert "not a glob pattern" in result.output.lower()
+
+    def test_invalidate_glob_shows_graceful_error_for_bad_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """invalidate-glob shows user-friendly error for malformed catalog."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "bad.py").write_text("def broken(\n")
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["invalidate-glob", "something"])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower()
+        assert "bad.py" in result.output

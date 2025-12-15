@@ -76,7 +76,7 @@ Resolved design questions that inform future implementation:
 - [x] Staleness check per-file (only download changed files)
 - [x] Cache path derivation for glob matches (preserve relative structure)
 - [x] `catalog.invalidate_glob(name)` - clear all cached files for a glob pattern
-- [ ] CLI `invalidate-glob <name>` command
+- [x] CLI `invalidate-glob <name>` command
 - [ ] S3 glob integration test with moto
 
 ## Phase 10: S3 Version Tracking
