@@ -12,6 +12,8 @@ from datacachalog import Catalog, Dataset, FileCache, FilesystemStorage
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
+@pytest.mark.tier(1)
 class TestBasicUsage:
     """Tests for basic_usage.py example pattern."""
 
@@ -42,6 +44,8 @@ class TestBasicUsage:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.FetchAll")
+@pytest.mark.tier(1)
 class TestParallelFetch:
     """Tests for parallel_fetch.py example pattern."""
 
@@ -87,6 +91,8 @@ class TestParallelFetch:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Push")
+@pytest.mark.tier(1)
 class TestPushWorkflow:
     """Tests for push_workflow.py example pattern."""
 
@@ -115,6 +121,8 @@ class TestPushWorkflow:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.ErrorHandling")
+@pytest.mark.tier(1)
 class TestErrorHandling:
     """Tests for error_handling.py example pattern."""
 
@@ -152,6 +160,8 @@ class TestErrorHandling:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
+@pytest.mark.tier(1)
 class TestLocalDevelopment:
     """Tests for local_development.py example pattern."""
 

@@ -6,6 +6,8 @@ import pytest
 
 
 @pytest.mark.progress
+@pytest.mark.tra("Adapter.RichProgressReporter")
+@pytest.mark.tier(1)
 class TestRichProgressReporter:
     """Tests for RichProgressReporter."""
 
@@ -75,6 +77,8 @@ class TestRichProgressReporter:
 
 
 @pytest.mark.progress
+@pytest.mark.tra("Adapter.RichProgressReporter")
+@pytest.mark.tier(1)
 class TestRichProgressReporterIntegration:
     """Integration tests for RichProgressReporter with Catalog."""
 
