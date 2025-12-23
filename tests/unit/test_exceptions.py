@@ -4,6 +4,8 @@ import pytest
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestDatacachalogError:
     """Tests for base exception class."""
 
@@ -22,6 +24,8 @@ class TestDatacachalogError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestDatasetNotFoundError:
     """Tests for DatasetNotFoundError."""
 
@@ -83,6 +87,8 @@ class TestDatasetNotFoundError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestStorageError:
     """Tests for StorageError base class."""
 
@@ -117,6 +123,8 @@ class TestStorageError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestStorageNotFoundError:
     """Tests for StorageNotFoundError."""
 
@@ -137,6 +145,8 @@ class TestStorageNotFoundError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestStorageAccessError:
     """Tests for StorageAccessError."""
 
@@ -157,6 +167,8 @@ class TestStorageAccessError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestCacheError:
     """Tests for CacheError base class."""
 
@@ -168,6 +180,8 @@ class TestCacheError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestCacheCorruptError:
     """Tests for CacheCorruptError."""
 
@@ -204,6 +218,8 @@ class TestCacheCorruptError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestConfigurationError:
     """Tests for ConfigurationError."""
 
@@ -215,6 +231,8 @@ class TestConfigurationError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestCatalogLoadError:
     """Tests for CatalogLoadError."""
 
@@ -295,6 +313,8 @@ class TestCatalogLoadError:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestVersioningNotSupportedError:
     """Tests for VersioningNotSupportedError."""
 

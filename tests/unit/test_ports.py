@@ -4,6 +4,8 @@ import pytest
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.ProgressCallback")
+@pytest.mark.tier(0)
 def test_progress_callback_is_callable():
     """ProgressCallback should be a callable type alias."""
     from datacachalog.core.ports import ProgressCallback
@@ -13,6 +15,8 @@ def test_progress_callback_is_callable():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.StoragePort")
+@pytest.mark.tier(0)
 def test_storage_port_has_download_method():
     """StoragePort should have a download method."""
     from datacachalog.core.ports import StoragePort
@@ -21,6 +25,8 @@ def test_storage_port_has_download_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.StoragePort")
+@pytest.mark.tier(0)
 def test_storage_port_has_upload_method():
     """StoragePort should have an upload method."""
     from datacachalog.core.ports import StoragePort
@@ -29,6 +35,8 @@ def test_storage_port_has_upload_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.StoragePort")
+@pytest.mark.tier(0)
 def test_storage_port_has_head_method():
     """StoragePort should have a head method."""
     from datacachalog.core.ports import StoragePort
@@ -37,6 +45,8 @@ def test_storage_port_has_head_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.CachePort")
+@pytest.mark.tier(0)
 def test_cache_port_has_get_method():
     """CachePort should have a get method."""
     from datacachalog.core.ports import CachePort
@@ -45,6 +55,8 @@ def test_cache_port_has_get_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.CachePort")
+@pytest.mark.tier(0)
 def test_cache_port_has_put_method():
     """CachePort should have a put method."""
     from datacachalog.core.ports import CachePort
@@ -53,6 +65,8 @@ def test_cache_port_has_put_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.CachePort")
+@pytest.mark.tier(0)
 def test_cache_port_has_invalidate_method():
     """CachePort should have an invalidate method."""
     from datacachalog.core.ports import CachePort
@@ -61,6 +75,8 @@ def test_cache_port_has_invalidate_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.StoragePort")
+@pytest.mark.tier(0)
 def test_class_satisfies_storage_port(fake_storage):
     """A class with matching methods should satisfy StoragePort via isinstance."""
     from datacachalog.core.ports import StoragePort
@@ -69,6 +85,8 @@ def test_class_satisfies_storage_port(fake_storage):
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.CachePort")
+@pytest.mark.tier(0)
 def test_class_satisfies_cache_port():
     """A class with matching methods should satisfy CachePort via isinstance."""
     from pathlib import Path
@@ -94,6 +112,8 @@ def test_class_satisfies_cache_port():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.StoragePort")
+@pytest.mark.tier(0)
 def test_ports_exported_from_package():
     """Ports should be importable from the main package."""
     from datacachalog import CachePort, ProgressCallback, StoragePort
@@ -104,6 +124,8 @@ def test_ports_exported_from_package():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.ProgressReporter")
+@pytest.mark.tier(0)
 class TestProgressReporterProtocol:
     """Tests for ProgressReporter protocol definition."""
 
@@ -144,6 +166,8 @@ class TestProgressReporterProtocol:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.ProgressReporter")
+@pytest.mark.tier(0)
 class TestNullProgressReporter:
     """Tests for NullProgressReporter."""
 

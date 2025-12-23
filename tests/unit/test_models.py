@@ -14,6 +14,8 @@ import pytest
 from datacachalog.core.models import CacheMetadata, Dataset, FileMetadata, ObjectVersion
 
 
+@pytest.mark.tra("Domain.Dataset")
+@pytest.mark.tier(0)
 class TestDataset:
     """Tests for the Dataset model."""
 
@@ -77,6 +79,8 @@ class TestDataset:
         assert original.cache_path is None  # Original unchanged
 
 
+@pytest.mark.tra("Domain.Dataset")
+@pytest.mark.tier(0)
 class TestDatasetWithResolvedPaths:
     """Tests for Dataset.with_resolved_paths()."""
 
@@ -151,6 +155,8 @@ class TestDatasetWithResolvedPaths:
         assert original.cache_path == Path("data/file.parquet")
 
 
+@pytest.mark.tra("Domain.FileMetadata")
+@pytest.mark.tier(0)
 class TestFileMetadata:
     """Tests for the FileMetadata model."""
 
@@ -245,6 +251,8 @@ class TestFileMetadata:
             meta.etag = "new"  # type: ignore[misc]
 
 
+@pytest.mark.tra("Domain.CacheMetadata")
+@pytest.mark.tier(0)
 class TestCacheMetadata:
     """Tests for the CacheMetadata model."""
 
@@ -305,6 +313,8 @@ class TestCacheMetadata:
             meta.etag = "new"  # type: ignore[misc]
 
 
+@pytest.mark.tra("Domain.ObjectVersion")
+@pytest.mark.tier(0)
 class TestObjectVersion:
     """Tests for the ObjectVersion model."""
 
@@ -389,6 +399,8 @@ class TestObjectVersion:
         assert metadata.etag is None
 
 
+@pytest.mark.tra("Domain.ObjectVersion")
+@pytest.mark.tier(0)
 class TestFindVersionAt:
     """Tests for the find_version_at() pure function."""
 
