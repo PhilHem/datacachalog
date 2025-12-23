@@ -16,6 +16,8 @@ from datacachalog.adapters.cache import FileCache
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
+@pytest.mark.tier(2)
 class TestCatalogS3Fetch:
     """Tests for Catalog.fetch() with S3 backend."""
 
@@ -111,6 +113,8 @@ class TestCatalogS3Fetch:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
+@pytest.mark.tier(2)
 class TestCatalogS3Staleness:
     """Tests for staleness detection with S3 backend."""
 
@@ -159,6 +163,8 @@ class TestCatalogS3Staleness:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
+@pytest.mark.tier(2)
 class TestCatalogS3Invalidate:
     """Tests for cache invalidation with S3 backend."""
 
@@ -195,6 +201,8 @@ class TestCatalogS3Invalidate:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
+@pytest.mark.tier(2)
 class TestCatalogS3Glob:
     """Tests for glob pattern support with S3 backend."""
 

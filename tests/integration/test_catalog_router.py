@@ -18,6 +18,8 @@ from datacachalog.adapters.storage.router import RouterStorage
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(2)
 class TestCatalogRouterMixedSchemes:
     """Tests for Catalog using RouterStorage with mixed URI schemes."""
 
@@ -115,6 +117,8 @@ class TestCatalogRouterMixedSchemes:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(2)
 class TestCatalogRouterStaleness:
     """Tests for staleness detection with RouterStorage."""
 

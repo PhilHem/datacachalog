@@ -13,6 +13,7 @@ runner = CliRunner()
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogInit:
     """Tests for catalog init command."""
 
@@ -102,6 +103,7 @@ class TestCatalogInit:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogList:
     """Tests for catalog list command."""
 
@@ -646,6 +648,7 @@ class TestCatalogFetch:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogStatus:
     """Tests for catalog status command."""
 
@@ -801,6 +804,7 @@ class TestCatalogStatus:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogInvalidate:
     """Tests for catalog invalidate command."""
 
@@ -862,6 +866,7 @@ class TestCatalogInvalidate:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogLoadErrors:
     """Tests for graceful error handling when catalog files are malformed."""
 
@@ -952,6 +957,7 @@ class TestCatalogLoadErrors:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(1)
 class TestCatalogInvalidateGlob:
     """Tests for catalog invalidate-glob command."""
 
@@ -1057,6 +1063,7 @@ class TestCatalogInvalidateGlob:
 
 
 @pytest.mark.cli
+@pytest.mark.tier(2)
 class TestCatalogVersions:
     """Tests for catalog versions command."""
 
