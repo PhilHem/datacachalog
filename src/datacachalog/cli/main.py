@@ -547,6 +547,73 @@ def versions(
         raise typer.Exit(1) from None
 
 
+@app.command()
+def push(
+    name: str = typer.Argument(help="Name of the dataset to push to."),
+    local_path: str = typer.Argument(help="Path to local file to upload."),
+    catalog: str | None = typer.Option(
+        None,
+        "--catalog",
+        "-c",
+        help="Push to a specific catalog only.",
+    ),
+) -> None:
+    """Upload a local file to a dataset's remote source."""
+    from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Filter to specific catalog if requested
+    if catalog:
+        if catalog not in catalogs:
+            typer.echo(f"Catalog '{catalog}' not found.")
+            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
+            raise typer.Exit(1)
+        catalogs = {catalog: catalogs[catalog]}
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    local_file = Path(local_path)
+    if not local_file.exists():
+        typer.echo(f"Error: File '{local_path}' does not exist.")
+        raise typer.Exit(1)
+
+    try:
+        with RichProgressReporter() as progress:
+            cat.push(name, local_file, progress=progress)
+        typer.echo(f"Pushed '{name}' to remote storage.")
+    except DatasetNotFoundError as e:
+        typer.echo(f"Dataset '{name}' not found.")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+    except FileNotFoundError as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1) from None
+
+
 def main() -> None:
     """Entry point for the CLI."""
     app()

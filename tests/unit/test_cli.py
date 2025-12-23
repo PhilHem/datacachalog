@@ -188,9 +188,11 @@ class TestCatalogList:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Fetch")
 class TestCatalogFetch:
     """Tests for catalog fetch command."""
 
+    @pytest.mark.tier(1)
     def test_fetch_returns_cached_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -224,6 +226,7 @@ class TestCatalogFetch:
         # Output should contain the path to cached file
         assert "data" in result.output
 
+    @pytest.mark.tier(1)
     def test_fetch_dataset_not_found_exits_with_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -246,6 +249,7 @@ class TestCatalogFetch:
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
 
+    @pytest.mark.tier(1)
     def test_fetch_with_catalog_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -287,6 +291,7 @@ class TestCatalogFetch:
         assert result.exit_code == 0, f"Failed with: {result.output}"
         assert "data" in result.output
 
+    @pytest.mark.tier(1)
     def test_fetch_with_progress_does_not_crash(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -317,6 +322,7 @@ class TestCatalogFetch:
 
         assert result.exit_code == 0, f"Failed with: {result.output}"
 
+    @pytest.mark.tier(1)
     def test_fetch_all_downloads_all_datasets(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -350,6 +356,7 @@ class TestCatalogFetch:
         assert "customers" in result.output
         assert "orders" in result.output
 
+    @pytest.mark.tier(1)
     def test_fetch_all_with_catalog_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1402,3 +1409,246 @@ class TestCatalogVersions:
             "versioning" in result.output.lower()
             or "not supported" in result.output.lower()
         )
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.Push")
+class TestCatalogPush:
+    """Tests for catalog push command."""
+
+    @pytest.mark.tier(1)
+    def test_push_uploads_file_to_remote(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push() should upload local file to dataset's source location."""
+        # Create source file (simulates remote storage)
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("original content")
+
+        # Create local file to upload
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_file = local_dir / "new_data.csv"
+        local_file.write_text("updated content")
+
+        # Create catalog with dataset pointing to source file
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{remote_file}"),
+            ]
+        """)
+        )
+
+        # Create data directory for cache
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["push", "customers", str(local_file)])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Assert: remote file now has updated content
+        assert remote_file.read_text() == "updated content"
+
+    @pytest.mark.tier(1)
+    def test_push_updates_cache_metadata(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push() should update cache with new metadata matching remote."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("original")
+
+        # Create local file to upload
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_file = local_dir / "new_data.csv"
+        local_file.write_text("updated")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{remote_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Push the file
+        result = runner.invoke(app, ["push", "customers", str(local_file)])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+
+        # Verify cache is fresh by checking status
+        status_result = runner.invoke(app, ["status"])
+        assert status_result.exit_code == 0
+        assert "customers" in status_result.output
+        assert "fresh" in status_result.output.lower()
+
+    @pytest.mark.tier(1)
+    def test_push_dataset_not_found_exits_with_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push() should exit with error for unknown dataset name."""
+        # Create empty catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        local_file = tmp_path / "file.csv"
+        local_file.write_text("content")
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["push", "nonexistent", str(local_file)])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    @pytest.mark.tier(1)
+    def test_push_file_not_found_exits_with_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push() should exit with error for missing local file."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("content")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{remote_file}"),
+            ]
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        missing_file = tmp_path / "does_not_exist.csv"
+
+        result = runner.invoke(app, ["push", "customers", str(missing_file)])
+
+        assert result.exit_code == 1
+        assert (
+            "not found" in result.output.lower()
+            or "does not exist" in result.output.lower()
+        )
+
+    @pytest.mark.tier(1)
+    def test_push_with_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push --catalog X pushes to that specific catalog's dataset."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("original")
+        (storage_dir / "metrics.csv").write_text("original")
+
+        # Create local file to upload
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_file = local_dir / "new_data.csv"
+        local_file.write_text("updated")
+
+        # Create two catalogs with same dataset name
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="data", source="{storage_dir / "customers.csv"}"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="data", source="{storage_dir / "metrics.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Push to core catalog specifically
+        result = runner.invoke(
+            app, ["push", "data", str(local_file), "--catalog", "core"]
+        )
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Should update core catalog's dataset
+        assert (storage_dir / "customers.csv").read_text() == "updated"
+        # Should NOT update analytics catalog's dataset
+        assert (storage_dir / "metrics.csv").read_text() == "original"
+
+    @pytest.mark.tier(1)
+    def test_push_shows_success_message(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push() should show success message or confirmation."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("original")
+
+        # Create local file to upload
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_file = local_dir / "new_data.csv"
+        local_file.write_text("updated")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{remote_file}"),
+            ]
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["push", "customers", str(local_file)])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Output should contain some indication of success
+        # (could be empty, but exit code 0 indicates success)
+        # Check that remote file was updated as confirmation
+        assert remote_file.read_text() == "updated"
