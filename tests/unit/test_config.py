@@ -19,6 +19,7 @@ from datacachalog.config import find_project_root
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.Config")
+@pytest.mark.tier(1)
 class TestFindProjectRoot:
     """Tests for find_project_root utility."""
 

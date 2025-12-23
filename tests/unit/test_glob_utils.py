@@ -5,6 +5,7 @@ import pytest
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.GlobUtils")
+@pytest.mark.tier(0)
 class TestIsGlobPattern:
     """Tests for is_glob_pattern()."""
 
@@ -44,6 +45,7 @@ class TestIsGlobPattern:
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.GlobUtils")
+@pytest.mark.tier(0)
 class TestSplitGlobPattern:
     """Tests for split_glob_pattern()."""
 
@@ -93,6 +95,7 @@ class TestSplitGlobPattern:
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.GlobUtils")
+@pytest.mark.tier(0)
 class TestDeriveCacheKey:
     """Tests for derive_cache_key()."""
 

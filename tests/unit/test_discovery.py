@@ -10,6 +10,7 @@ from datacachalog.discovery import discover_catalogs, load_catalog
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.Discovery")
+@pytest.mark.tier(1)
 class TestDiscoverCatalogs:
     """Tests for discover_catalogs function."""
 
@@ -50,6 +51,7 @@ class TestDiscoverCatalogs:
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.Discovery")
+@pytest.mark.tier(1)
 class TestLoadCatalog:
     """Tests for load_catalog function."""
 
@@ -111,6 +113,7 @@ datasets = []
 
 @pytest.mark.core
 @pytest.mark.tra("Domain.Discovery")
+@pytest.mark.tier(1)
 class TestLoadCatalogErrorHandling:
     """Tests for error handling in load_catalog."""
 

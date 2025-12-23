@@ -11,6 +11,7 @@ from datacachalog.core.ports import StoragePort
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestHead:
     """Tests for head() method."""
 
@@ -65,6 +66,7 @@ class TestHead:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestDownload:
     """Tests for download() method."""
 
@@ -126,6 +128,7 @@ class TestDownload:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestUpload:
     """Tests for upload() method."""
 
@@ -181,6 +184,7 @@ class TestUpload:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestList:
     """Tests for list() method."""
 
@@ -294,6 +298,7 @@ class TestList:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestProtocolConformance:
     """Tests for StoragePort protocol conformance."""
 
@@ -307,6 +312,7 @@ class TestProtocolConformance:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.FilesystemStorage")
+@pytest.mark.tier(1)
 class TestVersionMethods:
     """Tests for version-related methods (not supported by filesystem)."""
 

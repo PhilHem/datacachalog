@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestParseUriScheme:
     """Tests for URI scheme extraction."""
 
@@ -61,6 +62,7 @@ class TestParseUriScheme:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestRouterStorageHead:
     """Tests for RouterStorage.head() routing."""
 
@@ -117,6 +119,7 @@ class TestRouterStorageHead:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestRouterStorageDownload:
     """Tests for RouterStorage.download() routing."""
 
@@ -139,6 +142,7 @@ class TestRouterStorageDownload:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestRouterStorageUpload:
     """Tests for RouterStorage.upload() routing."""
 
@@ -159,6 +163,7 @@ class TestRouterStorageUpload:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestRouterStorageProtocol:
     """Tests for RouterStorage protocol conformance."""
 
@@ -173,6 +178,7 @@ class TestRouterStorageProtocol:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestCreateRouter:
     """Tests for create_router() factory function."""
 
@@ -203,6 +209,7 @@ class TestCreateRouter:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestFileUriSupport:
     """Tests for file:// URI scheme support."""
 
@@ -234,6 +241,7 @@ class TestFileUriSupport:
 
 @pytest.mark.storage
 @pytest.mark.tra("Adapter.RouterStorage")
+@pytest.mark.tier(1)
 class TestRouterStorageList:
     """Tests for RouterStorage.list() routing."""
 
