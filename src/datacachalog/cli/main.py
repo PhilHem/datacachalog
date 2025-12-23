@@ -1,11 +1,18 @@
 """CLI commands for datacachalog."""
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime  # noqa: TC003
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
 from datacachalog.core.exceptions import CatalogLoadError
+
+
+if TYPE_CHECKING:
+    from datacachalog import Catalog, Dataset
 
 
 app = typer.Typer(
@@ -621,6 +628,157 @@ def push(
     except FileNotFoundError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(1) from None
+
+
+@app.command()
+def info(
+    name: str | None = typer.Argument(None, help="Name of the dataset to inspect."),
+    all_datasets: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Show info for all datasets.",
+    ),
+    catalog: str | None = typer.Option(
+        None,
+        "--catalog",
+        "-c",
+        help="Show info for datasets from a specific catalog only.",
+    ),
+) -> None:
+    """Show detailed information about datasets."""
+    from datacachalog import Catalog, DatasetNotFoundError
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    # Validate arguments
+    # If --catalog is specified without name or --all, treat as --all for that catalog
+    if not name and not all_datasets and not catalog:
+        typer.echo("Error: Either provide a dataset name or use --all.")
+        raise typer.Exit(1)
+
+    if name and all_datasets:
+        typer.echo("Error: Cannot use both a dataset name and --all.")
+        raise typer.Exit(1)
+
+    # If --catalog specified without name or --all, treat as --all
+    if catalog and not name and not all_datasets:
+        all_datasets = True
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No datasets found. Run 'catalog init' to get started.")
+        return
+
+    # Filter to specific catalog if requested
+    if catalog:
+        if catalog not in catalogs:
+            typer.echo(f"Catalog '{catalog}' not found.")
+            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
+            raise typer.Exit(1)
+        catalogs = {catalog: catalogs[catalog]}
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    catalog_datasets: list[
+        tuple[str, str, Dataset]
+    ] = []  # (catalog_name, ds_name, dataset)
+    for catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+        for ds in datasets:
+            catalog_datasets.append((catalog_name, ds.name, ds))
+
+    # Create catalog (needed even if empty for dataset lookup)
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    # Filter datasets to show
+    if name:
+        # Single dataset - check if it exists
+        try:
+            dataset = cat.get_dataset(name)
+            # Find which catalog it belongs to
+            dataset_catalog_name: str | None = None
+            for cat_name, ds_name, _ds in catalog_datasets:
+                if ds_name == name:
+                    dataset_catalog_name = cat_name
+                    break
+
+            _show_dataset_info(cat, dataset, dataset_catalog_name, len(catalogs) > 1)
+        except DatasetNotFoundError as e:
+            typer.echo(f"Dataset '{name}' not found.")
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}")
+            raise typer.Exit(1) from None
+    else:
+        # All datasets
+        if not catalog_datasets:
+            typer.echo("No datasets found. Run 'catalog init' to get started.")
+            return
+
+        for catalog_name, ds_name, dataset in catalog_datasets:
+            _show_dataset_info(cat, dataset, catalog_name, len(catalogs) > 1)
+            if ds_name != catalog_datasets[-1][1]:  # Not last item
+                typer.echo()
+
+
+def _show_dataset_info(
+    catalog: Catalog,
+    dataset: Dataset,
+    catalog_name: str | None,
+    show_catalog_prefix: bool,
+) -> None:
+    """Show detailed information for a single dataset."""
+
+    # Get cache state
+    cached = catalog._cache.get(dataset.name)
+    if cached is None:
+        state = "missing"
+        cache_path_str = str(catalog._resolve_cache_path(dataset))
+        cache_size_str = "N/A"
+    else:
+        cached_path, _cached_meta = cached
+        cache_path_str = str(cached_path)
+        state = "stale" if catalog.is_stale(dataset.name) else "fresh"
+
+        # Calculate cache size
+        try:
+            cache_size = catalog.cache_size(dataset.name)
+            cache_size_str = _format_size(cache_size)
+        except Exception:
+            cache_size_str = "unknown"
+
+    # Display info
+    prefix = f"{catalog_name}/" if show_catalog_prefix and catalog_name else ""
+    typer.echo(f"Dataset: {prefix}{dataset.name}")
+    typer.echo(f"  Source: {dataset.source}")
+    typer.echo(f"  Cache path: {cache_path_str}")
+    typer.echo(f"  Status: {state}")
+    if cached is not None:
+        typer.echo(f"  Cache size: {cache_size_str}")
+    if dataset.description:
+        typer.echo(f"  Description: {dataset.description}")
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format size in bytes to human-readable format."""
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
 
 
 def main() -> None:

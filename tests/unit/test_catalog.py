@@ -1724,6 +1724,7 @@ class TestFetchGlob:
         )
 
     @pytest.mark.property
+    @pytest.mark.timeout(10.0)  # Property-based tests may take longer
     def test_fetch_dry_run_cache_immutability_property(self, tmp_path: Path) -> None:
         """Property: Multiple fetch(dry_run=True) calls never modify cache state."""
         import time
@@ -1817,6 +1818,120 @@ class TestFetchGlob:
                 )
 
         _test_cache_immutability()
+
+    @pytest.mark.property
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_never_modifies_cache_property(self, tmp_path: Path) -> None:
+        """Property: Multiple fetch(dry_run=True) calls never modify cache state (metadata, file contents, file count)."""
+        import uuid
+
+        from hypothesis import given
+        from hypothesis.strategies import binary, integers, text
+
+        from datacachalog import Dataset
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        @given(
+            content=binary(),
+            num_calls=integers(min_value=1, max_value=20),
+            dataset_name=text(
+                min_size=1,
+                max_size=20,
+                alphabet="abcdefghijklmnopqrstuvwxyz0123456789_",
+            ),
+        )
+        def _test_dry_run_never_modifies_cache(
+            content: bytes, num_calls: int, dataset_name: str
+        ) -> None:
+            # Setup: create fresh directories for each hypothesis run
+            run_id = uuid.uuid4().hex[:8]
+            storage_dir = tmp_path / f"storage_{run_id}"
+            storage_dir.mkdir()
+            remote_file = storage_dir / "data.bin"
+            remote_file.write_bytes(content)
+
+            cache_dir = tmp_path / f"cache_{run_id}"
+            storage = FilesystemStorage()
+            cache = FileCache(cache_dir=cache_dir)
+
+            dataset = Dataset(
+                name=dataset_name,
+                source=str(remote_file),
+                cache_path=cache_dir / f"{dataset_name}.bin",
+            )
+            catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+            # Populate cache first
+            catalog.fetch(dataset_name)
+
+            # Capture initial cache state
+            cached_before = cache.get(dataset_name)
+            assert cached_before is not None
+            cached_path_before, cached_meta_before = cached_before
+            file_content_before = cached_path_before.read_bytes()
+
+            # Count cache files before (data + metadata)
+            cache_files_before = len(list(cache_dir.rglob("*")))
+            cache_data_files_before = len(
+                [
+                    f
+                    for f in cache_dir.rglob("*")
+                    if f.is_file() and not f.name.endswith(".meta.json")
+                ]
+            )
+            cache_meta_files_before = len(list(cache_dir.rglob("*.meta.json")))
+
+            # Perform multiple dry-run calls
+            for _ in range(num_calls):
+                result = catalog.fetch(dataset_name, dry_run=True)
+                assert isinstance(result, Path)
+
+            # Verify cache state unchanged after all dry-run calls
+            cached_after = cache.get(dataset_name)
+            assert cached_after is not None, "Cache should not be removed in dry-run"
+
+            cached_path_after, cached_meta_after = cached_after
+
+            # Verify metadata unchanged
+            assert cached_meta_before == cached_meta_after, (
+                "Cache metadata should not change in dry-run"
+            )
+
+            # Verify file contents unchanged
+            file_content_after = cached_path_after.read_bytes()
+            assert file_content_before == file_content_after, (
+                "Cache file contents should not change in dry-run"
+            )
+
+            # Verify path unchanged
+            assert cached_path_before == cached_path_after, (
+                "Cache path should not change in dry-run"
+            )
+
+            # Verify file count unchanged
+            cache_files_after = len(list(cache_dir.rglob("*")))
+            cache_data_files_after = len(
+                [
+                    f
+                    for f in cache_dir.rglob("*")
+                    if f.is_file() and not f.name.endswith(".meta.json")
+                ]
+            )
+            cache_meta_files_after = len(list(cache_dir.rglob("*.meta.json")))
+
+            assert cache_files_before == cache_files_after, (
+                f"Cache file count should not change in dry-run (before: {cache_files_before}, after: {cache_files_after})"
+            )
+            assert cache_data_files_before == cache_data_files_after, (
+                f"Cache data file count should not change in dry-run (before: {cache_data_files_before}, after: {cache_data_files_after})"
+            )
+            assert cache_meta_files_before == cache_meta_files_after, (
+                f"Cache metadata file count should not change in dry-run (before: {cache_meta_files_before}, after: {cache_meta_files_after})"
+            )
+
+        _test_dry_run_never_modifies_cache()
 
 
 @pytest.mark.core

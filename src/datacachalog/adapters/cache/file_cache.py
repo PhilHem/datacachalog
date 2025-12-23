@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 from datetime import datetime
@@ -168,3 +169,42 @@ class FileCache:
                 path = path.parent
         except OSError:
             pass  # Directory not empty or other issue, ignore
+
+    def size(self) -> int:
+        """Calculate total cache size in bytes.
+
+        Includes both data files and metadata (.meta.json) files.
+
+        Returns:
+            Total size in bytes.
+        """
+        total_size = 0
+        if not self.cache_dir.exists():
+            return 0
+
+        for file_path in self.cache_dir.rglob("*"):
+            if file_path.is_file():
+                with contextlib.suppress(OSError):
+                    total_size += file_path.stat().st_size
+
+        return total_size
+
+    def statistics(self) -> dict[str, int]:
+        """Get cache statistics.
+
+        Returns:
+            Dictionary with 'total_size' (bytes) and 'file_count' (number of files).
+        """
+        total_size = 0
+        file_count = 0
+
+        if not self.cache_dir.exists():
+            return {"total_size": 0, "file_count": 0}
+
+        for file_path in self.cache_dir.rglob("*"):
+            if file_path.is_file():
+                with contextlib.suppress(OSError):
+                    total_size += file_path.stat().st_size
+                    file_count += 1
+
+        return {"total_size": total_size, "file_count": file_count}

@@ -1945,3 +1945,186 @@ class TestCatalogPush:
         # (could be empty, but exit code 0 indicates success)
         # Check that remote file was updated as confirmation
         assert remote_file.read_text() == "updated"
+
+
+@pytest.mark.cli
+@pytest.mark.tier(1)
+class TestCatalogInfo:
+    """Tests for catalog info command."""
+
+    def test_info_shows_dataset_details(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """info shows dataset name, source, cache path, staleness status."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["info", "customers"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers" in result.output
+        assert str(source_file) in result.output or "data.csv" in result.output
+        assert "data" in result.output  # cache path
+        assert (
+            "missing" in result.output.lower()
+            or "stale" in result.output.lower()
+            or "fresh" in result.output.lower()
+        )
+
+    def test_info_shows_all_datasets_with_all_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """info --all shows details for all datasets."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        # Create catalog with multiple datasets
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+                Dataset(name="orders", source="{storage_dir / "orders.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["info", "--all"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers" in result.output
+        assert "orders" in result.output
+
+    def test_info_with_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """info --catalog X shows only datasets from that catalog."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "metrics.csv").write_text("id,value\n1,42\n")
+
+        # Create two catalogs
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{storage_dir / "metrics.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["info", "--catalog", "core"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers" in result.output
+        assert "metrics" not in result.output
+
+    def test_info_dataset_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """info with unknown dataset shows error and exits 1."""
+        # Create empty catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["info", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_info_shows_cache_size_when_cached(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When dataset is cached, info shows cache size."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # First fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Now check info
+        result = runner.invoke(app, ["info", "customers"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers" in result.output
+        # Should show cache size (bytes or KB/MB)
+        assert (
+            "bytes" in result.output.lower()
+            or "kb" in result.output.lower()
+            or "mb" in result.output.lower()
+            or any(
+                char.isdigit()
+                for char in result.output
+                if "size" in result.output.lower()
+            )
+        )

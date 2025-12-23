@@ -241,3 +241,90 @@ class TestCorruptMetadata:
 
         assert exc_info.value.key == "mykey"
         assert exc_info.value.recovery_hint is not None
+
+
+@pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
+@pytest.mark.tier(1)
+class TestCacheSize:
+    """Tests for cache size calculation."""
+
+    def test_cache_size_calculation(self, tmp_path: Path) -> None:
+        """FileCache can calculate total cache size."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source1 = tmp_path / "source1.txt"
+        source1.write_text("data1")
+        source2 = tmp_path / "source2.txt"
+        source2.write_text("data2")
+
+        cache.put("key1", source1, CacheMetadata(etag='"a"'))
+        cache.put("key2", source2, CacheMetadata(etag='"b"'))
+
+        size = cache.size()
+        assert size > 0
+        # Should include both data files and metadata files
+        assert size >= len("data1") + len("data2")
+
+    def test_cache_size_per_dataset(self, tmp_path: Path) -> None:
+        """Catalog can calculate cache size per dataset."""
+        from datacachalog import Dataset
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(source_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache
+        catalog.fetch("customers")
+
+        size = catalog.cache_size("customers")
+        assert size > 0
+
+    def test_cache_size_includes_metadata_files(self, tmp_path: Path) -> None:
+        """Cache size includes both data files and .meta.json files."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("test data")
+
+        cache.put("mykey", source, CacheMetadata(etag='"abc"'))
+
+        size = cache.size()
+        # Should include both the data file and metadata file
+        data_size = len("test data")
+        # Metadata file has JSON content, so total should be > data_size
+        assert size > data_size
+
+    def test_cache_statistics_shows_total_size(self, tmp_path: Path) -> None:
+        """Cache statistics method returns total size and file count."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source1 = tmp_path / "source1.txt"
+        source1.write_text("data1")
+        source2 = tmp_path / "source2.txt"
+        source2.write_text("data2")
+
+        cache.put("key1", source1, CacheMetadata(etag='"a"'))
+        cache.put("key2", source2, CacheMetadata(etag='"b"'))
+
+        stats = cache.statistics()
+        assert stats["total_size"] > 0
+        assert stats["file_count"] >= 2  # At least 2 data files (plus metadata files)

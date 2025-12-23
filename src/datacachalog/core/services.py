@@ -487,6 +487,44 @@ class Catalog:
             )
         return self._cache.invalidate_prefix(name)
 
+    def cache_size(self, name: str) -> int:
+        """Calculate cache size for a dataset in bytes.
+
+        Includes both the data file and metadata file for the dataset.
+
+        Args:
+            name: The dataset name.
+
+        Returns:
+            Cache size in bytes. Returns 0 if dataset is not cached.
+
+        Raises:
+            DatasetNotFoundError: If no dataset with that name exists.
+        """
+        self.get_dataset(name)  # Validate dataset exists
+        cached = self._cache.get(name)
+        if cached is None:
+            return 0
+
+        cached_path, _ = cached
+        total_size = 0
+
+        # Add data file size
+        if cached_path.exists():
+            total_size += cached_path.stat().st_size
+
+        # Add metadata file size
+        # Metadata file is typically alongside the data file with .meta.json suffix
+        meta_path = cached_path.parent / f"{cached_path.name}.meta.json"
+        if not meta_path.exists() and hasattr(self._cache, "cache_dir"):
+            # Try alternative location (for flat cache structure)
+            meta_path = self._cache.cache_dir / f"{name}.meta.json"
+
+        if meta_path.exists():
+            total_size += meta_path.stat().st_size
+
+        return total_size
+
     def versions(self, name: str, limit: int | None = None) -> list[ObjectVersion]:
         """List available versions of a dataset.
 
