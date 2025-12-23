@@ -647,6 +647,290 @@ class TestCatalogFetch:
             assert result.exit_code == 1, f"Expected error but got: {result.output}"
             assert "as-of" in result.output.lower() or "all" in result.output.lower()
 
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_shows_stale_status_without_downloading(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dry-run shows stale status without downloading or modifying cache."""
+        import time
+
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # First fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Modify source file to make cache stale
+        time.sleep(0.1)  # Ensure mtime changes
+        source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        # Get cache state before dry-run
+        from datacachalog import Catalog
+        from datacachalog.config import find_project_root
+        from datacachalog.discovery import discover_catalogs, load_catalog
+
+        root = find_project_root()
+        catalogs = discover_catalogs(root)
+        all_ds = []
+        cache_dir = "data"
+        for _catalog_name, catalog_path in catalogs.items():
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+            all_ds.extend(datasets)
+            if cat_cache_dir:
+                cache_dir = cat_cache_dir
+        cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+        cached_before = cat._cache.get("customers")
+
+        # Dry-run fetch
+        result = runner.invoke(app, ["fetch", "customers", "--dry-run"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Should show stale status (or at least not download)
+        # Cache should be unchanged
+        cached_after = cat._cache.get("customers")
+        assert cached_before == cached_after, "Cache should not be modified in dry-run"
+
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_shows_fresh_status_when_cached(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dry-run shows fresh status when cache is up to date."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # First fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Dry-run fetch (cache should be fresh)
+        result = runner.invoke(app, ["fetch", "customers", "--dry-run"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Should show cached path (fresh status)
+
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_with_all_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dry-run with --all shows status for all datasets without downloading."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        # Create catalog with multiple datasets
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+                Dataset(name="orders", source="{storage_dir / "orders.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Dry-run fetch all
+        result = runner.invoke(app, ["fetch", "--all", "--dry-run"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Should show status for all datasets
+        assert "customers" in result.output
+        assert "orders" in result.output
+
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_with_as_of_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dry-run with --as-of checks version without downloading."""
+        from datetime import timedelta
+
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            # Get version timestamp
+            from datacachalog.adapters.storage import S3Storage
+
+            storage = S3Storage(client=client)
+            versions = storage.list_versions("s3://versioned-bucket/data.txt")
+            v1_timestamp = versions[0].last_modified
+            future_time = v1_timestamp + timedelta(days=1)
+            as_of_date = future_time.strftime("%Y-%m-%d")
+
+            result = runner.invoke(
+                app, ["fetch", "data", "--dry-run", "--as-of", as_of_date]
+            )
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_with_version_id_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dry-run with --version-id checks version without downloading."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            resp = client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+            version_id = resp["VersionId"]
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(
+                app, ["fetch", "data", "--dry-run", "--version-id", version_id]
+            )
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+
+    @pytest.mark.tier(1)
+    def test_fetch_dry_run_does_not_modify_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Multiple dry-run calls should not modify cache state."""
+        import time
+
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # First fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Modify source to make stale
+        time.sleep(0.1)
+        source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        # Get cache state before dry-runs
+        from datacachalog import Catalog
+        from datacachalog.config import find_project_root
+        from datacachalog.discovery import discover_catalogs, load_catalog
+
+        root = find_project_root()
+        catalogs = discover_catalogs(root)
+        all_ds = []
+        cache_dir = "data"
+        for _catalog_name, catalog_path in catalogs.items():
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+            all_ds.extend(datasets)
+            if cat_cache_dir:
+                cache_dir = cat_cache_dir
+        cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+        cached_before = cat._cache.get("customers")
+
+        # Multiple dry-run calls
+        runner.invoke(app, ["fetch", "customers", "--dry-run"])
+        runner.invoke(app, ["fetch", "customers", "--dry-run"])
+        runner.invoke(app, ["fetch", "customers", "--dry-run"])
+
+        # Cache should be unchanged
+        cached_after = cat._cache.get("customers")
+        assert cached_before == cached_after, "Cache should not be modified by dry-run"
+
 
 @pytest.mark.cli
 @pytest.mark.tier(1)

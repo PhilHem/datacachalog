@@ -1528,6 +1528,296 @@ class TestFetchGlob:
         contents = {p.read_text() for p in paths}
         assert contents == {"original 1", "updated 2"}
 
+    def test_fetch_with_dry_run_returns_cached_path_if_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        """fetch(dry_run=True) should return cached path when cache is fresh."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create "remote" file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # First fetch populates cache
+        result1 = catalog.fetch("customers")
+        assert isinstance(result1, Path)
+        path1 = result1
+
+        # Dry-run fetch should return cached path (fresh)
+        result2 = catalog.fetch("customers", dry_run=True)
+        assert isinstance(result2, Path)
+        path2 = result2
+
+        assert path2 == path1, "Dry-run should return cached path when fresh"
+
+    def test_fetch_with_dry_run_checks_staleness_but_does_not_download(
+        self, tmp_path: Path
+    ) -> None:
+        """fetch(dry_run=True) should check staleness but skip download and cache update."""
+        import time
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create "remote" file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # First fetch populates cache
+        result1 = catalog.fetch("customers")
+        assert isinstance(result1, Path)
+        path1 = result1
+        original_content = path1.read_text()
+
+        # Get cache metadata before modification
+        cached_before = cache.get("customers")
+        assert cached_before is not None
+
+        # Modify remote file (changes ETag/mtime)
+        time.sleep(0.1)  # Ensure mtime changes
+        remote_file.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        # Dry-run fetch should check staleness but not download
+        result2 = catalog.fetch("customers", dry_run=True)
+        assert isinstance(result2, Path)
+        path2 = result2
+
+        # Cache should be unchanged (still has old content)
+        assert path2.read_text() == original_content, (
+            "Cache should not be updated in dry-run"
+        )
+        cached_after = cache.get("customers")
+        assert cached_before == cached_after, (
+            "Cache metadata should not change in dry-run"
+        )
+
+    def test_fetch_all_with_dry_run(self, tmp_path: Path) -> None:
+        """fetch_all(dry_run=True) should check all datasets without downloading."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup: create "remote" files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        customers = Dataset(
+            name="customers",
+            source=str(storage_dir / "customers.csv"),
+            cache_path=cache_dir / "customers.csv",
+        )
+        orders = Dataset(
+            name="orders",
+            source=str(storage_dir / "orders.csv"),
+            cache_path=cache_dir / "orders.csv",
+        )
+        catalog = Catalog(datasets=[customers, orders], storage=storage, cache=cache)
+
+        # First fetch_all populates cache
+        catalog.fetch_all()
+
+        # Get cache state before dry-run
+        cached_customers_before = cache.get("customers")
+        cached_orders_before = cache.get("orders")
+
+        # Dry-run fetch_all
+        results = catalog.fetch_all(dry_run=True)
+
+        assert isinstance(results, dict)
+        assert "customers" in results
+        assert "orders" in results
+
+        # Cache should be unchanged
+        cached_customers_after = cache.get("customers")
+        cached_orders_after = cache.get("orders")
+        assert cached_customers_before == cached_customers_after
+        assert cached_orders_before == cached_orders_after
+
+    def test_fetch_glob_with_dry_run(self, tmp_path: Path) -> None:
+        """fetch(dry_run=True) for glob dataset should check staleness without downloading."""
+        import time
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        file1 = storage_dir / "file1.txt"
+        file2 = storage_dir / "file2.txt"
+        file1.write_text("original 1")
+        file2.write_text("original 2")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="files", source=str(storage_dir / "*.txt"))
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # First fetch populates cache
+        catalog.fetch("files")
+
+        # Get cache state before modification (check that entries exist)
+        cache_entry1_before = cache.get("files/file1.txt")
+        cache_entry2_before = cache.get("files/file2.txt")
+        assert cache_entry1_before is not None
+        assert cache_entry2_before is not None
+
+        # Modify one file
+        time.sleep(0.1)
+        file2.write_text("updated 2")
+
+        # Dry-run fetch
+        result = catalog.fetch("files", dry_run=True)
+        assert isinstance(result, list)
+
+        # Cache should be unchanged (same metadata)
+        cache_entry1_after = cache.get("files/file1.txt")
+        cache_entry2_after = cache.get("files/file2.txt")
+        assert cache_entry1_before == cache_entry1_after, (
+            "Cache should not be modified in dry-run"
+        )
+        assert cache_entry2_before == cache_entry2_after, (
+            "Cache should not be modified in dry-run"
+        )
+
+    @pytest.mark.property
+    def test_fetch_dry_run_cache_immutability_property(self, tmp_path: Path) -> None:
+        """Property: Multiple fetch(dry_run=True) calls never modify cache state."""
+        import time
+        import uuid
+
+        from hypothesis import given
+        from hypothesis.strategies import binary, integers
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        @given(
+            content=binary(),
+            num_calls=integers(min_value=1, max_value=10),
+            has_cache=integers(min_value=0, max_value=2),  # 0=missing, 1=fresh, 2=stale
+        )
+        def _test_cache_immutability(
+            content: bytes, num_calls: int, has_cache: int
+        ) -> None:
+            # Setup: create fresh directories for each hypothesis run
+            run_id = uuid.uuid4().hex[:8]
+            storage_dir = tmp_path / f"storage_{run_id}"
+            storage_dir.mkdir()
+            remote_file = storage_dir / "data.bin"
+            remote_file.write_bytes(content)
+
+            cache_dir = tmp_path / f"cache_{run_id}"
+            storage = FilesystemStorage()
+            cache = FileCache(cache_dir=cache_dir)
+
+            dataset = Dataset(
+                name="test_data",
+                source=str(remote_file),
+                cache_path=cache_dir / "test_data.bin",
+            )
+            catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+            # Setup cache state based on has_cache parameter
+            if has_cache > 0:  # 1=fresh, 2=stale
+                # Populate cache with initial fetch
+                catalog.fetch("test_data")
+
+                if has_cache == 2:  # stale cache
+                    # Modify remote file to make cache stale
+                    time.sleep(0.1)  # Ensure mtime changes
+                    remote_file.write_bytes(content + b"_modified")
+
+            # Capture initial cache state (may be None if no cache)
+            cached_initial = cache.get("test_data")
+            if cached_initial is not None:
+                cached_path_initial, cached_meta_initial = cached_initial
+                file_content_initial = cached_path_initial.read_bytes()
+            else:
+                cached_path_initial = None
+                cached_meta_initial = None
+                file_content_initial = None
+
+            # Perform multiple dry-run calls
+            for _ in range(num_calls):
+                result = catalog.fetch("test_data", dry_run=True)
+                assert isinstance(result, Path)
+
+            # Verify cache state unchanged after all dry-run calls
+            cached_after = cache.get("test_data")
+
+            if cached_initial is None:
+                # No cache before - should still be no cache after
+                assert cached_after is None, "Cache should not be created in dry-run"
+            else:
+                # Cache existed before - verify unchanged
+                assert cached_after is not None, (
+                    "Cache should not be removed in dry-run"
+                )
+                cached_path_after, cached_meta_after = cached_after
+
+                # Verify metadata unchanged
+                assert cached_meta_initial == cached_meta_after, (
+                    "Cache metadata should not change in dry-run"
+                )
+
+                # Verify file contents unchanged
+                file_content_after = cached_path_after.read_bytes()
+                assert file_content_initial == file_content_after, (
+                    "Cache file contents should not change in dry-run"
+                )
+
+                # Verify path unchanged
+                assert cached_path_initial == cached_path_after, (
+                    "Cache path should not change in dry-run"
+                )
+
+        _test_cache_immutability()
+
 
 @pytest.mark.core
 @pytest.mark.tra("UseCase.Versions")

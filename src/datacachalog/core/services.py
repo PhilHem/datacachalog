@@ -178,6 +178,7 @@ class Catalog:
         *,
         version_id: str | None = None,
         as_of: datetime | None = None,
+        dry_run: bool = False,
     ) -> Path | list[Path]:
         """Fetch a dataset, downloading if not cached or stale.
 
@@ -189,6 +190,7 @@ class Catalog:
             progress: Optional progress reporter for download feedback.
             version_id: Optional S3 version ID to fetch a specific version.
             as_of: Optional datetime to fetch the version active at that time.
+            dry_run: If True, check staleness but skip download and cache updates.
 
         Returns:
             Path to local cached file (single file) or list[Path] (glob pattern).
@@ -216,7 +218,7 @@ class Catalog:
                     "Versioned fetch (version_id or as_of) is not supported "
                     "for glob pattern datasets"
                 )
-            return self._fetch_glob(dataset, progress)
+            return self._fetch_glob(dataset, progress, dry_run=dry_run)
 
         # Resolve as_of to version_id
         if as_of is not None:
@@ -230,16 +232,18 @@ class Catalog:
 
         # Version-specific fetch
         if version_id is not None:
-            return self._fetch_version(dataset, version_id, progress)
+            return self._fetch_version(dataset, version_id, progress, dry_run=dry_run)
 
         # Single file fetch (existing logic)
-        return self._fetch_single(name, dataset, progress)
+        return self._fetch_single(name, dataset, progress, dry_run=dry_run)
 
     def _fetch_single(
         self,
         cache_key: str,
         dataset: Dataset,
         progress: ProgressReporter,
+        *,
+        dry_run: bool = False,
     ) -> Path:
         """Fetch a single file with caching and staleness detection.
 
@@ -247,6 +251,7 @@ class Catalog:
             cache_key: Key to use for caching (may differ from dataset.name for globs).
             dataset: Dataset with source to fetch.
             progress: Progress reporter for download feedback.
+            dry_run: If True, check staleness but skip download and cache updates.
 
         Returns:
             Path to the local cached file.
@@ -258,6 +263,16 @@ class Catalog:
             remote_meta = self._storage.head(dataset.source)
             if not cache_meta.is_stale(remote_meta):
                 return cached_path
+
+        # In dry-run mode, check staleness but don't download or update cache
+        if dry_run:
+            # Still need to check remote metadata for staleness
+            remote_meta = self._storage.head(dataset.source)
+            # Return cached path if exists, otherwise return expected cache path
+            if cached is not None:
+                return cached_path
+            # No cache exists - return expected cache path
+            return self._resolve_cache_path(dataset)
 
         # Cache miss or stale - download with progress
         dest = self._resolve_cache_path(dataset)
@@ -292,6 +307,8 @@ class Catalog:
         dataset: Dataset,
         version_id: str,
         progress: ProgressReporter,
+        *,
+        dry_run: bool = False,
     ) -> Path:
         """Fetch a specific version of a dataset.
 
@@ -302,6 +319,7 @@ class Catalog:
             dataset: Dataset with source to fetch.
             version_id: S3 version ID to download.
             progress: Progress reporter for download feedback.
+            dry_run: If True, check version exists but skip download and cache updates.
 
         Returns:
             Path to the local cached file.
@@ -322,6 +340,12 @@ class Catalog:
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached[0]
+
+        # In dry-run mode, return expected cache path without downloading
+        if dry_run:
+            if self._cache_dir is None:
+                raise ConfigurationError("cache_dir is required for versioned fetches")
+            return self._cache_dir / cache_key
 
         # Download to a temporary location first, then cache will copy to final location
         import tempfile
@@ -367,12 +391,15 @@ class Catalog:
         self,
         dataset: Dataset,
         progress: ProgressReporter,
+        *,
+        dry_run: bool = False,
     ) -> list[Path]:
         """Fetch all files matching a glob pattern.
 
         Args:
             dataset: Dataset with glob pattern in source.
             progress: Progress reporter for download feedback.
+            dry_run: If True, check staleness but skip downloads and cache updates.
 
         Returns:
             List of paths to local cached files.
@@ -400,7 +427,9 @@ class Catalog:
                 description=dataset.description,
             )
 
-            path = self._fetch_single(cache_key, single_dataset, progress)
+            path = self._fetch_single(
+                cache_key, single_dataset, progress, dry_run=dry_run
+            )
             paths.append(path)
 
         return paths
@@ -523,6 +552,8 @@ class Catalog:
         self,
         progress: ProgressReporter | None = None,
         max_workers: int | None = None,
+        *,
+        dry_run: bool = False,
     ) -> dict[str, Path | list[Path]]:
         """Fetch all datasets, downloading any that are stale.
 
@@ -534,6 +565,7 @@ class Catalog:
             max_workers: Maximum parallel downloads when executor is provided.
                 Use 1 for sequential downloads. When executor is None, execution
                 is always sequential regardless of max_workers.
+            dry_run: If True, check staleness but skip downloads and cache updates.
 
         Returns:
             Dict mapping dataset names to their local cached paths.
@@ -551,12 +583,14 @@ class Catalog:
         # Sequential execution for max_workers=1 or when no executor provided
         if max_workers == 1 or self._executor is None:
             for dataset in datasets:
-                results[dataset.name] = self.fetch(dataset.name, progress=progress)
+                results[dataset.name] = self.fetch(
+                    dataset.name, progress=progress, dry_run=dry_run
+                )
             return results
 
         # Parallel execution - use injected executor
         def fetch_one(dataset: Dataset) -> tuple[str, Path | list[Path]]:
-            result = self.fetch(dataset.name, progress=progress)
+            result = self.fetch(dataset.name, progress=progress, dry_run=dry_run)
             return dataset.name, result
 
         executor = self._executor

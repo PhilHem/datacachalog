@@ -155,6 +155,11 @@ def fetch(
         "--version-id",
         help="Fetch specific version by ID (from 'catalog versions').",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Check staleness and show what would be downloaded without actually downloading or modifying cache.",
+    ),
 ) -> None:
     """Fetch a dataset, downloading if stale."""
     from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
@@ -218,7 +223,7 @@ def fetch(
     try:
         with RichProgressReporter() as progress:
             if all_datasets:
-                paths = cat.fetch_all(progress=progress)
+                paths = cat.fetch_all(progress=progress, dry_run=dry_run)
                 for ds_name, result in paths.items():
                     if isinstance(result, list):
                         # Glob dataset - list all paths
@@ -229,7 +234,11 @@ def fetch(
             else:
                 assert name is not None  # Validated above
                 result = cat.fetch(
-                    name, progress=progress, as_of=as_of, version_id=version_id
+                    name,
+                    progress=progress,
+                    as_of=as_of,
+                    version_id=version_id,
+                    dry_run=dry_run,
                 )
                 if isinstance(result, list):
                     # Glob dataset - print each path on its own line

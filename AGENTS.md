@@ -2,6 +2,58 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Workflow Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. PROVISION        2. EXECUTE           3. LAND              │
+│  ─────────────       ─────────────        ─────────────        │
+│  /provision          /rg-beads            bd sync              │
+│  (plan mode →        (TDD on ready        git push             │
+│   explore →           tasks)                                   │
+│   create issues)                                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Provision Work (`/provision`)
+
+```
+/provision "Add --dry-run flag to fetch command"
+```
+
+**Staged pipeline with gates:**
+
+| Stage | Goal | Gate |
+|-------|------|------|
+| 0. Deduplication | Check existing beads | No duplicates |
+| 1. Decomposition | Break into tasks | Single-responsibility, 1-3h |
+| 2. Architecture | Validate against rules | P0 issues have fix tasks |
+| 3. Contract | Define testing reqs | TRA, tier, verification |
+| 4. Dependencies | Set task order | No cycles, epic→tasks |
+| 5. Review | User approval | All gates passed |
+| 6. Create | Build beads issues | Validated structure |
+
+### 2. Execute Work (`/rg-beads`)
+
+TDD pipeline on ready issues:
+- Select up to 3 related ready tasks (`bd ready`)
+- Batched RED → GREEN → REFACTOR phases
+- Updates issue status on completion
+- Checks if parent tasks/epics can be closed
+
+### 3. Land the Plane (Session End)
+
+**MANDATORY before saying "done":**
+
+```bash
+git status                    # Check changes
+git add <files>               # Stage code
+bd sync                       # Sync beads
+git commit -m "..."           # Commit
+git push                      # Push to remote
+git status                    # MUST show "up to date"
+```
+
 ## Quick Reference
 
 ```bash
@@ -12,65 +64,29 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
 ## Dependency Rules
 
 `bd dep add <issue> <depends-on>` means "issue is blocked by depends-on".
 
-**CRITICAL**: Dependencies flow from parent to child. The parent (epic/task) depends on its children (tasks/subtasks), meaning the parent cannot be completed until all children are done.
+**Direction**: Parents depend on children. Children are ready first, parents close last.
 
-| Relationship | Command | Meaning |
-|-------------|---------|---------|
-| Epic → Tasks | `bd dep add epic-123 task-a` | Epic blocked until task done |
-| Epic → Tasks | `bd dep add epic-123 task-b` | Epic blocked until task done |
-| Task → Subtasks | `bd dep add task-456 subtask-x` | Task blocked until subtask done |
+| Relationship | Command | Result |
+|-------------|---------|--------|
+| Epic → Tasks | `bd dep add epic-123 task-a` | Task ready, epic blocked |
+| Task → Subtasks | `bd dep add task-456 subtask-x` | Subtask ready, task blocked |
 
-**Epic pattern**: When an epic contains tasks, the epic MUST depend on ALL its tasks:
+**Epic pattern**:
 ```bash
-# Create epic with tasks as children
-bd create --type epic --title "My Epic"
-bd create --type task --title "Task A" --parent epic-123
-bd create --type task --title "Task B" --parent epic-123
-
-# IMPORTANT: --parent creates child→parent dependency (backwards!)
-# Remove the auto-created dependencies, then add correct parent→child dependencies
-bd dep remove task-a epic-123
-bd dep remove task-b epic-123
-
-# Epic depends on its tasks (epic blocked until tasks done)
-bd dep add epic-123 task-a
-bd dep add epic-123 task-b
+bd dep add epic-123 task-a    # Epic depends on task-a
+bd dep add epic-123 task-b    # Epic depends on task-b
 ```
-Result: Tasks are ready to work independently, epic closes last (only after all tasks complete).
+Result: `task-a` and `task-b` are ready to work, `epic-123` closes when both done.
 
-**Note**: When using `--parent`, beads automatically creates a dependency from child to parent. You MUST reverse these dependencies so the parent (epic) depends on children (tasks), not the other way around.
+**Common mistake**: `bd dep add task epic` blocks the task until epic is done (backwards!)
 
-**Common mistakes**:
-- ❌ `bd dep add task epic` - WRONG: This blocks the task until epic is done (backwards!)
-- ❌ `bd dep add epic feature-request` - WRONG: Epic should depend on its tasks, not external issues
-- ✅ `bd dep add epic task` - CORRECT: Epic blocked until task done
+## Critical Rules
+
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
