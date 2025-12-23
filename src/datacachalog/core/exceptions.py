@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from pathlib import Path
 
 
@@ -190,3 +191,22 @@ class CatalogLoadError(DatacachalogError):
         if self.line:
             return f"Check {self.catalog_path.name} at line {self.line}"
         return f"Check {self.catalog_path.name} for syntax or import errors"
+
+
+class VersionNotFoundError(DatacachalogError):
+    """Raised when no version exists at the requested time.
+
+    Attributes:
+        name: The dataset name.
+        as_of: The requested point in time.
+    """
+
+    def __init__(self, name: str, as_of: datetime) -> None:
+        self.name = name
+        self.as_of = as_of
+        super().__init__(f"No version of '{name}' found at or before {as_of}")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest viewing available versions."""
+        return f"Try a later date or use catalog.versions('{self.name}') to see available versions"

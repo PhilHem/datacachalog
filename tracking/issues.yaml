@@ -1,0 +1,44 @@
+# Tracking issues for datacachalog project
+
+unconfirmed: []
+confirmed: []
+resolved:
+  - id: VERSION-001
+    verification: unit
+    complexity: EASY
+    source: manual
+    description: catalog.versions(name, limit=10) feature already implemented
+    location: src/datacachalog/core/services.py:401-419, src/datacachalog/cli/main.py:466-540
+    timestamp: 2025-12-23
+  - id: FETCH-001
+    verification: tra
+    complexity: MED
+    source: arch-analysis
+    description: "Tests for catalog.fetch(as_of=datetime) lack @pytest.mark.tra anchors - tests use @pytest.mark.core but no TRA namespace anchors"
+    location: tests/unit/test_catalog.py:1647-1846
+    timestamp: "2025-12-23"
+    resolution: fixed
+  - id: FETCH-002
+    verification: tier
+    complexity: EASY
+    source: arch-analysis
+    description: "Tests for catalog.fetch(as_of=datetime) lack @pytest.mark.tier markers for CI job separation"
+    location: tests/unit/test_catalog.py:1647-1846
+    timestamp: "2025-12-23"
+    resolution: fixed
+  - id: FETCH-003
+    verification: concurrency-boundary
+    complexity: MED
+    source: arch-analysis
+    description: "ThreadPoolExecutor used in core/services.py (Catalog.fetch_all) - concurrency primitive in domain layer"
+    location: src/datacachalog/core/services.py:3,500
+    timestamp: "2025-12-23"
+    resolution: fixed
+  - id: FETCH-004
+    verification: fake-adapter
+    complexity: EASY
+    source: arch-analysis
+    description: "FakeStorage exists only as local test class in test_ports.py, not as reusable fixture/adapter for versioned fetch tests"
+    location: tests/unit/test_ports.py:72-100
+    timestamp: "2025-12-23"
+    resolution: fixed

@@ -62,6 +62,8 @@ markers = [
     "progress: Rich progress integration",
     "cli: CLI tests",
     "e2e: End-to-end tests",
+    "tra: Test Responsibility Anchor (TRA) - namespace.Anchor format",
+    "tier: Test tier for CI job separation (0=instant, 1=fast, 2=standard, 3=slow, 4=manual)",
 ]
 
 # Strict mode - fail on unknown markers and config errors
@@ -169,11 +171,18 @@ lines-after-imports = 2
 "tests/**/*.py" = [
     "ARG",    # Unused arguments OK in tests (fixtures)
 ]
+"tests/conftest.py" = [
+    "TC001",  # Runtime imports needed for fixtures
+    "TC003",  # Runtime imports needed for fixtures
+]
 "src/datacachalog/core/models.py" = [
     "TC003",  # Path needed at runtime for is_absolute() and path joining
 ]
 "src/datacachalog/discovery.py" = [
     "TC003",  # Path needed at runtime for glob, stem, etc.
+]
+"src/datacachalog/cli/*.py" = [
+    "B008",   # typer.Option/Argument are designed for function defaults
 ]
 
 [tool.ruff.format]

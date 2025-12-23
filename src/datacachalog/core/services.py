@@ -1,6 +1,6 @@
 """Core domain services for datacachalog."""
 
-from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 from datacachalog.core.exceptions import (
@@ -13,9 +13,15 @@ from datacachalog.core.glob_utils import (
     is_glob_pattern,
     split_glob_pattern,
 )
-from datacachalog.core.models import CacheMetadata, Dataset
+from datacachalog.core.models import (
+    CacheMetadata,
+    Dataset,
+    ObjectVersion,
+    find_version_at,
+)
 from datacachalog.core.ports import (
     CachePort,
+    ExecutorPort,
     NullProgressReporter,
     ProgressReporter,
     StoragePort,
@@ -31,11 +37,13 @@ class Catalog:
         storage: StoragePort,
         cache: CachePort,
         cache_dir: Path | None = None,
+        executor: ExecutorPort | None = None,
     ) -> None:
         self._datasets = {d.name: d for d in datasets}
         self._storage = storage
         self._cache = cache
         self._cache_dir = cache_dir
+        self._executor = executor
 
     @classmethod
     def from_directory(
@@ -129,6 +137,9 @@ class Catalog:
         self,
         name: str,
         progress: ProgressReporter | None = None,
+        *,
+        version_id: str | None = None,
+        as_of: datetime | None = None,
     ) -> Path | list[Path]:
         """Fetch a dataset, downloading if not cached or stale.
 
@@ -138,6 +149,8 @@ class Catalog:
         Args:
             name: The dataset name.
             progress: Optional progress reporter for download feedback.
+            version_id: Optional S3 version ID to fetch a specific version.
+            as_of: Optional datetime to fetch the version active at that time.
 
         Returns:
             Path to local cached file (single file) or list[Path] (glob pattern).
@@ -145,15 +158,41 @@ class Catalog:
         Raises:
             DatasetNotFoundError: If no dataset with that name exists.
             EmptyGlobMatchError: If glob pattern matches no files.
+            ValueError: If both version_id and as_of are provided.
+            ValueError: If version_id or as_of used with glob pattern.
+            VersionNotFoundError: If no version exists at as_of time.
         """
         if progress is None:
             progress = NullProgressReporter()
 
+        # Validate mutually exclusive parameters
+        if version_id is not None and as_of is not None:
+            raise ValueError("version_id and as_of are mutually exclusive")
+
         dataset = self.get_dataset(name)
 
-        # Check if this is a glob pattern
+        # Check for glob + version incompatibility
         if is_glob_pattern(dataset.source):
+            if version_id is not None or as_of is not None:
+                raise ValueError(
+                    "Versioned fetch (version_id or as_of) is not supported "
+                    "for glob pattern datasets"
+                )
             return self._fetch_glob(dataset, progress)
+
+        # Resolve as_of to version_id
+        if as_of is not None:
+            versions = self._storage.list_versions(dataset.source)
+            resolved_version = find_version_at(versions, as_of)
+            if resolved_version is None:
+                from datacachalog.core.exceptions import VersionNotFoundError
+
+                raise VersionNotFoundError(name, as_of)
+            version_id = resolved_version.version_id
+
+        # Version-specific fetch
+        if version_id is not None:
+            return self._fetch_version(name, dataset, version_id, progress)
 
         # Single file fetch (existing logic)
         return self._fetch_single(name, dataset, progress)
@@ -207,6 +246,62 @@ class Catalog:
         cached_result = self._cache.get(cache_key)
         if cached_result is None:
             # Shouldn't happen - we just put it
+            return dest
+        return cached_result[0]
+
+    def _fetch_version(
+        self,
+        name: str,
+        dataset: Dataset,
+        version_id: str,
+        progress: ProgressReporter,
+    ) -> Path:
+        """Fetch a specific version of a dataset.
+
+        Downloads the specified version using download_version() and caches
+        it under a version-aware key ({name}@{version_id}).
+
+        Args:
+            name: The dataset name.
+            dataset: Dataset with source to fetch.
+            version_id: S3 version ID to download.
+            progress: Progress reporter for download feedback.
+
+        Returns:
+            Path to the local cached file.
+        """
+        # Use version-aware cache key
+        cache_key = f"{name}@{version_id}"
+
+        # Check cache for this specific version
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached[0]
+
+        # Download this specific version
+        dest = self._resolve_cache_path(dataset)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        remote_meta = self._storage.head_version(dataset.source, version_id)
+        total_size = remote_meta.size or 0
+
+        callback = progress.start_task(cache_key, total_size)
+        try:
+            self._storage.download_version(dataset.source, dest, version_id, callback)
+        finally:
+            progress.finish_task(cache_key)
+
+        # Store in cache with metadata
+        cache_meta = CacheMetadata(
+            etag=remote_meta.etag,
+            last_modified=remote_meta.last_modified,
+            source=dataset.source,
+        )
+        self._cache.put(cache_key, dest, cache_meta)
+
+        # Return the cache's path
+        cached_result = self._cache.get(cache_key)
+        if cached_result is None:
             return dest
         return cached_result[0]
 
@@ -305,6 +400,26 @@ class Catalog:
             )
         return self._cache.invalidate_prefix(name)
 
+    def versions(self, name: str, limit: int | None = None) -> list[ObjectVersion]:
+        """List available versions of a dataset.
+
+        Returns version history for versioned storage backends (e.g., S3 with
+        versioning enabled). Versions are sorted newest-first.
+
+        Args:
+            name: The dataset name.
+            limit: Maximum number of versions to return.
+
+        Returns:
+            List of ObjectVersion with metadata for each version.
+
+        Raises:
+            DatasetNotFoundError: If no dataset with that name exists.
+            VersioningNotSupportedError: If storage backend doesn't support versioning.
+        """
+        dataset = self.get_dataset(name)
+        return self._storage.list_versions(dataset.source, limit=limit)
+
     def push(
         self,
         name: str,
@@ -379,15 +494,26 @@ class Catalog:
                 results[dataset.name] = self.fetch(dataset.name, progress=progress)
             return results
 
-        # Parallel execution
+        # Parallel execution - use injected executor or create one
         def fetch_one(dataset: Dataset) -> tuple[str, Path | list[Path]]:
             result = self.fetch(dataset.name, progress=progress)
             return dataset.name, result
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Use injected executor if available, otherwise create ThreadPoolExecutorAdapter
+        if self._executor is not None:
+            executor = self._executor
+        else:
+            from datacachalog.adapters.executor import ThreadPoolExecutorAdapter
+
+            executor = ThreadPoolExecutorAdapter(max_workers=max_workers)
+
+        with executor:
             futures = [executor.submit(fetch_one, ds) for ds in datasets]
             for future in futures:
-                name, result = future.result()
+                result_tuple = future.result()
+                # Type narrowing: fetch_one returns tuple[str, Path | list[Path]]
+                assert isinstance(result_tuple, tuple)
+                name, result = result_tuple
                 results[name] = result
 
         return results

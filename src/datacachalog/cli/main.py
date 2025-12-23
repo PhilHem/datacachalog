@@ -1,5 +1,6 @@
 """CLI commands for datacachalog."""
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -143,10 +144,22 @@ def fetch(
         "-c",
         help="Fetch from a specific catalog only.",
     ),
+    as_of: datetime | None = typer.Option(
+        None,
+        "--as-of",
+        help="Fetch version at this time (ISO format: 2024-12-10 or 2024-12-10T09:30:00).",
+        formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"],
+    ),
+    version_id: str | None = typer.Option(
+        None,
+        "--version-id",
+        help="Fetch specific version by ID (from 'catalog versions').",
+    ),
 ) -> None:
     """Fetch a dataset, downloading if stale."""
     from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
     from datacachalog.config import find_project_root
+    from datacachalog.core.exceptions import VersionNotFoundError
     from datacachalog.discovery import discover_catalogs, load_catalog
 
     # Validate arguments
@@ -156,6 +169,14 @@ def fetch(
 
     if name and all_datasets:
         typer.echo("Error: Cannot use both a dataset name and --all.")
+        raise typer.Exit(1)
+
+    if all_datasets and (as_of or version_id):
+        typer.echo("Error: --as-of and --version-id cannot be used with --all.")
+        raise typer.Exit(1)
+
+    if as_of and version_id:
+        typer.echo("Error: --as-of and --version-id are mutually exclusive.")
         raise typer.Exit(1)
 
     root = find_project_root()
@@ -200,7 +221,9 @@ def fetch(
                         typer.echo(f"{ds_name}: {result}")
             else:
                 assert name is not None  # Validated above
-                result = cat.fetch(name, progress=progress)
+                result = cat.fetch(
+                    name, progress=progress, as_of=as_of, version_id=version_id
+                )
                 if isinstance(result, list):
                     # Glob dataset - print each path on its own line
                     for path in result:
@@ -211,6 +234,14 @@ def fetch(
         typer.echo(f"Dataset '{name}' not found.")
         if e.recovery_hint:
             typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+    except VersionNotFoundError as e:
+        typer.echo(f"Error: {e}")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+    except ValueError as e:
+        typer.echo(f"Error: {e}")
         raise typer.Exit(1) from None
 
 
@@ -429,6 +460,83 @@ def invalidate_glob(
         raise typer.Exit(1) from None
     except ValueError as e:
         typer.echo(f"Error: {e}")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def versions(
+    name: str = typer.Argument(help="Name of the dataset to list versions for."),
+    limit: int = typer.Option(
+        10,
+        "--limit",
+        "-n",
+        help="Maximum number of versions to show.",
+    ),
+) -> None:
+    """List available versions for a dataset.
+
+    Shows version history with timestamps. Requires S3 with versioning enabled.
+    """
+    from datacachalog import Catalog, DatasetNotFoundError
+    from datacachalog.config import find_project_root
+    from datacachalog.core.exceptions import VersioningNotSupportedError
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    try:
+        version_list = cat.versions(name, limit=limit)
+
+        if not version_list:
+            typer.echo(f"No versions found for '{name}'.")
+            return
+
+        typer.echo(f"Versions for '{name}' (newest first):\n")
+        for v in version_list:
+            # Format: timestamp | version_id | size | flags
+            flags = []
+            if v.is_latest:
+                flags.append("latest")
+            if v.is_delete_marker:
+                flags.append("deleted")
+            flag_str = f" [{', '.join(flags)}]" if flags else ""
+
+            size_str = f"{v.size:,} bytes" if v.size else "unknown size"
+            ts_str = v.last_modified.strftime("%Y-%m-%d %H:%M:%S")
+
+            typer.echo(f"  {ts_str}  {v.version_id or 'N/A':<36}  {size_str}{flag_str}")
+
+    except DatasetNotFoundError as e:
+        typer.echo(f"Dataset '{name}' not found.")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
+        raise typer.Exit(1) from None
+    except VersioningNotSupportedError as e:
+        typer.echo(f"Error: {e}")
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}")
         raise typer.Exit(1) from None
 
 

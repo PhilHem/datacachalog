@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     import builtins
+    from concurrent.futures import Future
     from pathlib import Path
 
     from datacachalog.core.models import CacheMetadata, FileMetadata, ObjectVersion
@@ -190,3 +191,38 @@ class NullProgressReporter:
     def finish_task(self, name: str) -> None:
         """Do nothing."""
         _ = name  # Unused but required by protocol
+
+
+@runtime_checkable
+class ExecutorPort(Protocol):
+    """Executor for parallel task execution.
+
+    Abstracts over concurrent.futures executors to allow dependency injection
+    and testing. The core domain uses this protocol instead of directly
+    importing ThreadPoolExecutor, maintaining "concurrency at the edges".
+    """
+
+    def submit(
+        self, fn: Callable[..., object], *args: object, **kwargs: object
+    ) -> Future[object]:  # type: ignore[name-defined, unused-ignore]
+        """Submit a function for execution.
+
+        Args:
+            fn: Function to execute.
+            *args: Positional arguments to pass to fn.
+            **kwargs: Keyword arguments to pass to fn.
+
+        Returns:
+            Future representing the pending result.
+        """
+        ...
+
+    def __enter__(self) -> ExecutorPort:
+        """Enter context manager."""
+        ...
+
+    def __exit__(
+        self, exc_type: object, exc_val: object, exc_tb: object
+    ) -> object | None:
+        """Exit context manager."""
+        ...

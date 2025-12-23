@@ -215,3 +215,31 @@ class ObjectVersion:
             last_modified=self.last_modified,
             size=self.size,
         )
+
+
+def find_version_at(
+    versions: list[ObjectVersion],
+    as_of: datetime,
+) -> ObjectVersion | None:
+    """Find the version with last_modified closest to and <= as_of.
+
+    This is the core time-travel resolution logic. It finds the version
+    that was current at the specified point in time.
+
+    Args:
+        versions: List of versions, assumed sorted newest-first.
+        as_of: The point in time to resolve to.
+
+    Returns:
+        The ObjectVersion active at as_of, or None if no version existed then.
+
+    Note:
+        Delete markers are automatically skipped since they represent
+        deleted objects that cannot be downloaded.
+    """
+    for version in versions:
+        if version.is_delete_marker:
+            continue
+        if version.last_modified <= as_of:
+            return version
+    return None

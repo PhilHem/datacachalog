@@ -1,0 +1,25 @@
+# Test Architecture Contract
+# Defines TRA namespaces, tier thresholds, and concurrency boundaries
+
+# Allowed TRA namespaces
+NAMESPACES: Domain, UseCase, Port, Adapter, Contract, CompositionRoot
+
+# Deprecated markers to flag for removal
+DEPRECATED_MARKERS: "@slow, @fast, @integration, @smoke, @benchmark, @acceptance, @unit"
+
+# Allowed markers (orthogonal system)
+ALLOWED_MARKERS: "tra, tier, local, no_parallel, property, parametrize, skip, xfail, usefixtures, filterwarnings, timeout, asyncio, hypothesis"
+
+# Tier timeout thresholds (seconds)
+TIER_THRESHOLDS:
+  0: 0.1   # instant
+  1: 2.0   # fast (pre-commit)
+  2: 30.0  # standard (CI push)
+  3: 300.0 # slow (CI main)
+  4: null  # manual (no limit)
+
+# Paths where concurrency primitives are forbidden (sync-only layers)
+SYNC_ONLY_LAYERS: "src/datacachalog/core/"
+
+# Patterns to detect concurrency smells
+CONCURRENCY_SMELLS: "async def, ProcessPoolExecutor, ThreadPoolExecutor, threading.Lock, asyncio.Lock"

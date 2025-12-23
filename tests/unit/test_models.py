@@ -387,3 +387,105 @@ class TestObjectVersion:
 
         assert metadata.last_modified == datetime(2024, 12, 14)
         assert metadata.etag is None
+
+
+class TestFindVersionAt:
+    """Tests for the find_version_at() pure function."""
+
+    @pytest.mark.core
+    def test_find_version_at_returns_closest_before(self) -> None:
+        """find_version_at() returns version with last_modified <= as_of."""
+        from datacachalog.core.models import find_version_at
+
+        versions = [
+            ObjectVersion(last_modified=datetime(2024, 12, 15), version_id="v3"),
+            ObjectVersion(last_modified=datetime(2024, 12, 10), version_id="v2"),
+            ObjectVersion(last_modified=datetime(2024, 12, 5), version_id="v1"),
+        ]
+
+        result = find_version_at(versions, as_of=datetime(2024, 12, 12))
+
+        assert result is not None
+        assert result.version_id == "v2"  # Dec 10 is closest to Dec 12
+
+    @pytest.mark.core
+    def test_find_version_at_exact_match(self) -> None:
+        """Exact datetime match returns that version."""
+        from datacachalog.core.models import find_version_at
+
+        versions = [
+            ObjectVersion(last_modified=datetime(2024, 12, 15), version_id="v3"),
+            ObjectVersion(last_modified=datetime(2024, 12, 10), version_id="v2"),
+            ObjectVersion(last_modified=datetime(2024, 12, 5), version_id="v1"),
+        ]
+
+        result = find_version_at(versions, as_of=datetime(2024, 12, 10))
+
+        assert result is not None
+        assert result.version_id == "v2"
+
+    @pytest.mark.core
+    def test_find_version_at_returns_none_if_all_after(self) -> None:
+        """Returns None if all versions are after as_of."""
+        from datacachalog.core.models import find_version_at
+
+        versions = [
+            ObjectVersion(last_modified=datetime(2024, 12, 15), version_id="v3"),
+            ObjectVersion(last_modified=datetime(2024, 12, 10), version_id="v2"),
+        ]
+
+        result = find_version_at(versions, as_of=datetime(2024, 12, 1))
+
+        assert result is None
+
+    @pytest.mark.core
+    def test_find_version_at_skips_delete_markers(self) -> None:
+        """Delete markers are skipped during resolution."""
+        from datacachalog.core.models import find_version_at
+
+        versions = [
+            ObjectVersion(
+                last_modified=datetime(2024, 12, 15),
+                version_id="v3",
+                is_delete_marker=True,
+            ),
+            ObjectVersion(last_modified=datetime(2024, 12, 10), version_id="v2"),
+            ObjectVersion(last_modified=datetime(2024, 12, 5), version_id="v1"),
+        ]
+
+        # Dec 15 delete marker should be skipped, returns Dec 10
+        result = find_version_at(versions, as_of=datetime(2024, 12, 20))
+
+        assert result is not None
+        assert result.version_id == "v2"
+
+    @pytest.mark.core
+    def test_find_version_at_empty_list(self) -> None:
+        """Returns None for empty version list."""
+        from datacachalog.core.models import find_version_at
+
+        result = find_version_at([], as_of=datetime(2024, 12, 10))
+
+        assert result is None
+
+    @pytest.mark.core
+    def test_find_version_at_all_delete_markers(self) -> None:
+        """Returns None if all versions are delete markers."""
+        from datacachalog.core.models import find_version_at
+
+        versions = [
+            ObjectVersion(
+                last_modified=datetime(2024, 12, 15),
+                version_id="v2",
+                is_delete_marker=True,
+            ),
+            ObjectVersion(
+                last_modified=datetime(2024, 12, 10),
+                version_id="v1",
+                is_delete_marker=True,
+            ),
+        ]
+
+        result = find_version_at(versions, as_of=datetime(2024, 12, 20))
+
+        assert result is None

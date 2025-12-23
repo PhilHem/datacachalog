@@ -61,46 +61,11 @@ def test_cache_port_has_invalidate_method():
 
 
 @pytest.mark.core
-def test_class_satisfies_storage_port():
+def test_class_satisfies_storage_port(fake_storage):
     """A class with matching methods should satisfy StoragePort via isinstance."""
-    import builtins
-    from pathlib import Path
+    from datacachalog.core.ports import StoragePort
 
-    from datacachalog.core.models import FileMetadata, ObjectVersion
-    from datacachalog.core.ports import ProgressCallback, StoragePort
-
-    class FakeStorage:
-        def download(self, source: str, dest: Path, progress: ProgressCallback) -> None:
-            pass
-
-        def upload(self, local: Path, dest: str) -> None:
-            pass
-
-        def head(self, source: str) -> FileMetadata:
-            return FileMetadata(etag="abc")
-
-        def list(self, prefix: str, pattern: str | None = None) -> builtins.list[str]:
-            return []
-
-        def list_versions(
-            self, source: str, limit: int | None = None
-        ) -> builtins.list[ObjectVersion]:
-            return []
-
-        def head_version(self, source: str, version_id: str) -> FileMetadata:
-            return FileMetadata(etag="abc")
-
-        def download_version(
-            self,
-            source: str,
-            dest: Path,
-            version_id: str,
-            progress: ProgressCallback,
-        ) -> None:
-            pass
-
-    storage: StoragePort = FakeStorage()
-    assert isinstance(storage, StoragePort)
+    assert isinstance(fake_storage, StoragePort)
 
 
 @pytest.mark.core
