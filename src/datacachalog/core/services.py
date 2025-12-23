@@ -133,6 +133,44 @@ class Catalog:
 
         return self._cache_dir / filename
 
+    def _resolve_version_cache_key(
+        self, dataset: Dataset, last_modified: datetime
+    ) -> str:
+        """Generate a date-based cache key for a versioned file.
+
+        Format: YYYY-MM-DDTHHMMSS.ext where ext comes from the original filename.
+
+        Args:
+            dataset: The dataset being fetched.
+            last_modified: The version's last_modified timestamp.
+
+        Returns:
+            Cache key in format YYYY-MM-DDTHHMMSS.ext
+        """
+        # Extract extension from source filename
+        source = dataset.source
+        if "://" in source:
+            path_part = source.split("://", 1)[1]
+            filename = path_part.split("/", 1)[1] if "/" in path_part else path_part
+        else:
+            filename = Path(source).name
+
+        # Get extension (including the dot)
+        ext = Path(filename).suffix
+
+        # Format datetime as YYYY-MM-DDTHHMMSS (no colons, no timezone)
+        # Ensure UTC timezone for consistent formatting
+        from datetime import UTC
+
+        if last_modified.tzinfo is None:
+            dt = last_modified.replace(tzinfo=UTC)
+        else:
+            dt = last_modified.astimezone(UTC)
+
+        date_str = dt.strftime("%Y-%m-%dT%H%M%S")
+
+        return f"{date_str}{ext}"
+
     def fetch(
         self,
         name: str,
@@ -192,7 +230,7 @@ class Catalog:
 
         # Version-specific fetch
         if version_id is not None:
-            return self._fetch_version(name, dataset, version_id, progress)
+            return self._fetch_version(dataset, version_id, progress)
 
         # Single file fetch (existing logic)
         return self._fetch_single(name, dataset, progress)
@@ -251,7 +289,6 @@ class Catalog:
 
     def _fetch_version(
         self,
-        name: str,
         dataset: Dataset,
         version_id: str,
         progress: ProgressReporter,
@@ -259,10 +296,9 @@ class Catalog:
         """Fetch a specific version of a dataset.
 
         Downloads the specified version using download_version() and caches
-        it under a version-aware key ({name}@{version_id}).
+        it under a date-based filename (YYYY-MM-DDTHHMMSS.ext).
 
         Args:
-            name: The dataset name.
             dataset: Dataset with source to fetch.
             version_id: S3 version ID to download.
             progress: Progress reporter for download feedback.
@@ -270,39 +306,61 @@ class Catalog:
         Returns:
             Path to the local cached file.
         """
-        # Use version-aware cache key
-        cache_key = f"{name}@{version_id}"
+        # Get version metadata to generate date-based cache key
+        remote_meta = self._storage.head_version(dataset.source, version_id)
+
+        # Ensure we have last_modified (required for date-based key)
+        if remote_meta.last_modified is None:
+            raise ValueError(
+                f"Version {version_id} has no last_modified timestamp - cannot generate date-based cache key"
+            )
+
+        # Generate date-based cache key (filename)
+        cache_key = self._resolve_version_cache_key(dataset, remote_meta.last_modified)
 
         # Check cache for this specific version
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached[0]
 
-        # Download this specific version
-        dest = self._resolve_cache_path(dataset)
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Download to a temporary location first, then cache will copy to final location
+        import tempfile
 
-        remote_meta = self._storage.head_version(dataset.source, version_id)
-        total_size = remote_meta.size or 0
+        # Ensure cache directory exists
+        if self._cache_dir is None:
+            raise ConfigurationError("cache_dir is required for versioned fetches")
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
 
-        callback = progress.start_task(cache_key, total_size)
+        with tempfile.NamedTemporaryFile(delete=False, dir=self._cache_dir) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+
         try:
-            self._storage.download_version(dataset.source, dest, version_id, callback)
-        finally:
-            progress.finish_task(cache_key)
+            total_size = remote_meta.size or 0
 
-        # Store in cache with metadata
-        cache_meta = CacheMetadata(
-            etag=remote_meta.etag,
-            last_modified=remote_meta.last_modified,
-            source=dataset.source,
-        )
-        self._cache.put(cache_key, dest, cache_meta)
+            callback = progress.start_task(cache_key, total_size)
+            try:
+                self._storage.download_version(
+                    dataset.source, tmp_path, version_id, callback
+                )
+            finally:
+                progress.finish_task(cache_key)
+
+            # Store in cache with metadata (cache will copy to final date-based location)
+            cache_meta = CacheMetadata(
+                etag=remote_meta.etag,
+                last_modified=remote_meta.last_modified,
+                source=dataset.source,
+            )
+            self._cache.put(cache_key, tmp_path, cache_meta)
+        finally:
+            # Clean up temporary file if it still exists
+            tmp_path.unlink(missing_ok=True)
 
         # Return the cache's path
         cached_result = self._cache.get(cache_key)
         if cached_result is None:
-            return dest
+            # Shouldn't happen - we just put it, but return the cache's expected path
+            return self._cache_dir / cache_key
         return cached_result[0]
 
     def _fetch_glob(

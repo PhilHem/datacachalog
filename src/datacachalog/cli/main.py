@@ -208,6 +208,13 @@ def fetch(
     # Create catalog and fetch
     cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
 
+    # Make as_of timezone-aware (UTC) if provided
+    # Typer parses date strings as naive datetimes, but S3 versions are timezone-aware
+    if as_of is not None and as_of.tzinfo is None:
+        from datetime import UTC
+
+        as_of = as_of.replace(tzinfo=UTC)
+
     try:
         with RichProgressReporter() as progress:
             if all_datasets:
@@ -515,7 +522,7 @@ def versions(
 
         typer.echo(f"Versions for '{name}' (newest first):\n")
         for v in version_list:
-            # Format: timestamp | version_id | size | flags
+            # Format: timestamp | size | flags (version_id hidden)
             flags = []
             if v.is_latest:
                 flags.append("latest")
@@ -526,7 +533,7 @@ def versions(
             size_str = f"{v.size:,} bytes" if v.size else "unknown size"
             ts_str = v.last_modified.strftime("%Y-%m-%d %H:%M:%S")
 
-            typer.echo(f"  {ts_str}  {v.version_id or 'N/A':<36}  {size_str}{flag_str}")
+            typer.echo(f"  {ts_str}  {size_str}{flag_str}")
 
     except DatasetNotFoundError as e:
         typer.echo(f"Dataset '{name}' not found.")

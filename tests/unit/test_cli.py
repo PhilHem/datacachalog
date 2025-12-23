@@ -392,6 +392,251 @@ class TestCatalogFetch:
         assert "customers" in result.output
         assert "metrics" not in result.output
 
+    @pytest.mark.tier(2)
+    def test_fetch_with_as_of_flag_resolves_version(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fetch --as-of resolves and downloads correct version."""
+        from datetime import timedelta
+
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            # Upload a version
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"version 1"
+            )
+
+            # Create catalog with dataset pointing to S3
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            # Get version timestamp to use for --as-of
+            from datacachalog.adapters.storage import S3Storage
+
+            storage = S3Storage(client=client)
+            versions = storage.list_versions("s3://versioned-bucket/data.txt")
+            v1_timestamp = versions[0].last_modified
+            future_time = v1_timestamp + timedelta(days=1)
+
+            # Format as YYYY-MM-DD for CLI
+            as_of_date = future_time.strftime("%Y-%m-%d")
+
+            result = runner.invoke(app, ["fetch", "data", "--as-of", as_of_date])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Should output path to cached file
+            assert "data" in result.output
+
+    @pytest.mark.tier(1)
+    def test_fetch_with_as_of_flag_date_format_parsing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Date format parsing works for YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS formats."""
+        from datetime import timedelta
+
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            # Get version timestamp to use future dates
+            from datacachalog.adapters.storage import S3Storage
+
+            storage = S3Storage(client=client)
+            versions = storage.list_versions("s3://versioned-bucket/data.txt")
+            v1_timestamp = versions[0].last_modified
+            future_time1 = v1_timestamp + timedelta(days=1)
+            future_time2 = v1_timestamp + timedelta(days=2)
+
+            # Test YYYY-MM-DD format
+            as_of_date1 = future_time1.strftime("%Y-%m-%d")
+            result1 = runner.invoke(app, ["fetch", "data", "--as-of", as_of_date1])
+            assert result1.exit_code == 0, f"Failed with: {result1.output}"
+
+            # Test YYYY-MM-DDTHH:MM:SS format
+            as_of_date2 = future_time2.strftime("%Y-%m-%dT%H:%M:%S")
+            result2 = runner.invoke(app, ["fetch", "data", "--as-of", as_of_date2])
+            assert result2.exit_code == 0, f"Failed with: {result2.output}"
+
+    @pytest.mark.tier(1)
+    def test_fetch_with_as_of_flag_error_when_version_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Error handling when no version exists at or before specified date."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            # Upload a version
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            # Use a date in the past before any version exists
+            result = runner.invoke(app, ["fetch", "data", "--as-of", "2020-01-01"])
+
+            assert result.exit_code == 1, f"Expected error but got: {result.output}"
+            assert (
+                "version" in result.output.lower()
+                or "not found" in result.output.lower()
+            )
+
+    @pytest.mark.tier(1)
+    def test_fetch_with_as_of_flag_mutually_exclusive_with_version_id(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--as-of and --version-id cannot be used together."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "data",
+                    "--as-of",
+                    "2024-12-10",
+                    "--version-id",
+                    "some-version-id",
+                ],
+            )
+
+            assert result.exit_code == 1, f"Expected error but got: {result.output}"
+            assert "mutually exclusive" in result.output.lower() or (
+                "as-of" in result.output.lower()
+                and "version-id" in result.output.lower()
+            )
+
+    @pytest.mark.tier(1)
+    def test_fetch_with_as_of_flag_cannot_use_with_all(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--as-of cannot be used with --all flag."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["fetch", "--all", "--as-of", "2024-12-10"])
+
+            assert result.exit_code == 1, f"Expected error but got: {result.output}"
+            assert "as-of" in result.output.lower() or "all" in result.output.lower()
+
 
 @pytest.mark.cli
 class TestCatalogStatus:
@@ -802,3 +1047,358 @@ class TestCatalogInvalidateGlob:
         assert result.exit_code == 1
         assert "error" in result.output.lower()
         assert "bad.py" in result.output
+
+
+@pytest.mark.cli
+class TestCatalogVersions:
+    """Tests for catalog versions command."""
+
+    def test_versions_shows_version_list(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """versions command lists available versions with dates."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            # Setup versioned S3 bucket
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            # Upload multiple versions
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v1")
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v2")
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v3")
+
+            # Create catalog with dataset pointing to S3
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            assert "Versions for 'data'" in result.output
+            # Should show dates (YYYY-MM-DD format)
+            assert (
+                "202" in result.output
+                or "2024" in result.output
+                or "2025" in result.output
+            )
+
+    def test_versions_hides_version_id_by_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Version ID is not shown in default output."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            resp = client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"v1"
+            )
+            version_id = resp["VersionId"]
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Version ID should NOT be in output
+            # The expected format is: "  YYYY-MM-DD HH:MM:SS  size [flags]"
+            # NOT: "  YYYY-MM-DD HH:MM:SS  version_id  size [flags]"
+            assert version_id not in result.output, (
+                f"Version ID {version_id} should not be in output"
+            )
+            # Also verify the format: should have date, then size, without version_id in between
+            output_lines = [
+                line.strip()
+                for line in result.output.split("\n")
+                if line.strip()
+                and not line.startswith("Versions for")
+                and not line.startswith("No versions")
+            ]
+            assert len(output_lines) > 0, "Should have at least one version line"
+            # Each line should match: date (YYYY-MM-DD HH:MM:SS) followed by size
+            # Should NOT have a long alphanumeric string (version_id) between them
+            for line in output_lines:
+                # Split by whitespace - should have: date, time, size_number, "bytes", optionally flags
+                parts = line.split()
+                # After date/time (first 2 parts), next should be size number, not a version_id
+                # Version IDs are typically UUIDs or long strings - check that part[2] is a number or "unknown"
+                if len(parts) >= 3:
+                    # parts[0] = date, parts[1] = time, parts[2] should be size number or "unknown"
+                    # If parts[2] looks like a version_id (long alphanumeric), that's wrong
+                    third_part = parts[2]
+                    # Version IDs are typically non-numeric, so if it's not a number and not "unknown", it might be version_id
+                    if (
+                        not third_part.replace(",", "").isdigit()
+                        and third_part != "unknown"
+                        and len(third_part) > 10
+                    ):
+                        # This is likely a version_id, which should not be there
+                        raise AssertionError(
+                            f"Found potential version_id in output: {third_part}"
+                        )
+
+    def test_versions_shows_date_as_primary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Date/timestamp is the primary identifier in output."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v1")
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Date should be at the start of each version line
+            # Format should be: "  YYYY-MM-DD HH:MM:SS  size [flags]"
+            output_lines = [
+                line
+                for line in result.output.split("\n")
+                if line.strip() and not line.startswith("Versions for")
+            ]
+            assert len(output_lines) > 0, "Should have at least one version line"
+            # First non-header line should start with date format
+            first_version_line = output_lines[0]
+            # Should start with spaces, then date (YYYY-MM-DD)
+            assert first_version_line.strip().startswith(
+                "202"
+            ) or first_version_line.strip().startswith("20")
+
+    def test_versions_respects_limit_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--limit flag limits number of versions shown."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            # Upload 5 versions
+            for i in range(5):
+                client.put_object(
+                    Bucket="versioned-bucket", Key="data.txt", Body=f"v{i}".encode()
+                )
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data", "--limit", "3"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Count version lines (excluding header)
+            version_lines = [
+                line
+                for line in result.output.split("\n")
+                if line.strip()
+                and not line.startswith("Versions for")
+                and not line.startswith("No versions")
+            ]
+            assert len(version_lines) == 3, (
+                f"Expected 3 versions, got {len(version_lines)}"
+            )
+
+    def test_versions_shows_latest_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Latest version is marked with 'latest' flag."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v1")
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v2")
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Should show "latest" flag for the newest version
+            assert "latest" in result.output.lower()
+
+    def test_versions_shows_deleted_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Delete markers are marked with 'deleted' flag."""
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            client.put_object(Bucket="versioned-bucket", Key="data.txt", Body=b"v1")
+            # Delete the object (creates delete marker)
+            client.delete_object(Bucket="versioned-bucket", Key="data.txt")
+
+            catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+            catalogs_dir.mkdir(parents=True)
+            (catalogs_dir / "default.py").write_text(
+                dedent("""\
+                from datacachalog import Dataset
+                datasets = [
+                    Dataset(name="data", source="s3://versioned-bucket/data.txt"),
+                ]
+            """)
+            )
+
+            (tmp_path / "data").mkdir()
+            monkeypatch.chdir(tmp_path)
+
+            result = runner.invoke(app, ["versions", "data"])
+
+            assert result.exit_code == 0, f"Failed with: {result.output}"
+            # Should show "deleted" flag for delete marker
+            assert "deleted" in result.output.lower()
+
+    def test_versions_dataset_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Error handling for unknown dataset."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+        (tmp_path / "data").mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["versions", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_versions_versioning_not_supported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Error handling for non-versioned storage."""
+        # Create source file (filesystem storage doesn't support versioning)
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.txt"
+        source_file.write_text("content")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="data", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["versions", "data"])
+
+        assert result.exit_code == 1
+        assert (
+            "versioning" in result.output.lower()
+            or "not supported" in result.output.lower()
+        )

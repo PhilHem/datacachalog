@@ -1368,9 +1368,11 @@ class TestFetchGlob:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Versions")
 class TestVersions:
     """Tests for catalog.versions() method."""
 
+    @pytest.mark.tier(2)
     def test_versions_returns_object_versions(self, tmp_path: Path) -> None:
         """versions() should return list of ObjectVersion for dataset."""
         import boto3
@@ -1415,6 +1417,7 @@ class TestVersions:
             assert len(versions) == 3
             assert all(isinstance(v, ObjectVersion) for v in versions)
 
+    @pytest.mark.tier(2)
     def test_versions_respects_limit(self, tmp_path: Path) -> None:
         """versions(limit=N) should return at most N versions."""
         import boto3
@@ -1456,6 +1459,7 @@ class TestVersions:
             # Assert
             assert len(versions) == 3
 
+    @pytest.mark.tier(1)
     def test_versions_raises_dataset_not_found(self, tmp_path: Path) -> None:
         """versions() should raise DatasetNotFoundError for unknown dataset."""
         from datacachalog.adapters.cache import FileCache
@@ -1472,6 +1476,7 @@ class TestVersions:
         with pytest.raises(DatasetNotFoundError, match="unknown"):
             catalog.versions("unknown")
 
+    @pytest.mark.tier(1)
     def test_versions_raises_on_non_versioned_storage(self, tmp_path: Path) -> None:
         """versions() should raise VersioningNotSupportedError for filesystem."""
         from datacachalog.adapters.cache import FileCache
@@ -1584,11 +1589,17 @@ class TestFetchVersion:
             )
 
             # Fetch with version_id
-            catalog.fetch("data", version_id=version_id)
+            path = catalog.fetch("data", version_id=version_id)
 
-            # Cache key should include version_id
-            version_cache_key = f"data@{version_id}"
-            assert cache.get(version_cache_key) is not None
+            # Cache key should be date-based (not {name}@{version_id})
+            filename = path.name
+            assert filename.endswith(".txt")
+            # Should be date-based format: YYYY-MM-DDTHHMMSS.txt
+            date_part = filename[:-4]
+            assert len(date_part) == 17  # YYYY-MM-DDTHHMMSS
+            assert date_part[10] == "T"  # Date-time separator
+            # Verify it's cached
+            assert cache.get(filename) is not None
 
     def test_fetch_version_caches_separately_from_latest(self, tmp_path: Path) -> None:
         """Versioned fetch and normal fetch should use separate cache entries."""
@@ -1638,8 +1649,170 @@ class TestFetchVersion:
             assert old_path.read_text() == "old version"
 
             # Should be different cache entries
-            assert cache.get("data") is not None  # latest
-            assert cache.get(f"data@{v1_id}") is not None  # versioned
+            assert cache.get("data") is not None  # latest uses dataset name
+            # Versioned uses date-based key (filename from path)
+            assert (
+                cache.get(old_path.name) is not None
+            )  # versioned uses date-based filename
+
+    def test_fetch_version_uses_date_based_file_path(self, tmp_path: Path) -> None:
+        """Versioned fetches should use date-based file paths (YYYY-MM-DDTHHMMSS.ext)."""
+        import boto3
+        from moto import mock_aws
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.services import Catalog
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            resp = client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+            version_id = resp["VersionId"]
+
+            cache_dir = tmp_path / "cache"
+            storage = S3Storage(client=client)
+            cache = FileCache(cache_dir=cache_dir)
+
+            dataset = Dataset(name="data", source="s3://versioned-bucket/data.txt")
+            catalog = Catalog(
+                datasets=[dataset],
+                storage=storage,
+                cache=cache,
+                cache_dir=cache_dir,
+            )
+
+            # Fetch with version_id
+            path = catalog.fetch("data", version_id=version_id)
+
+            # File path should be date-based format: YYYY-MM-DDTHHMMSS.ext
+            filename = path.name
+            assert filename.endswith(".txt")
+            # Check format: YYYY-MM-DDTHHMMSS.txt (no colons in time part)
+            date_part = filename[:-4]  # Remove .txt extension
+            assert (
+                len(date_part) == 17
+            )  # YYYY-MM-DDTHHMMSS = 17 chars (4+1+2+1+2+1+2+2+2)
+            assert date_part[4] == "-"  # Year-month separator
+            assert date_part[7] == "-"  # Month-day separator
+            assert date_part[10] == "T"  # Date-time separator
+            # Time part should have no colons (HHMMSS format)
+            assert ":" not in date_part
+
+    def test_fetch_version_date_format_matches_version_timestamp(
+        self, tmp_path: Path
+    ) -> None:
+        """The date in filename should match the version's last_modified timestamp."""
+        import boto3
+        from moto import mock_aws
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.services import Catalog
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            resp = client.put_object(
+                Bucket="versioned-bucket", Key="data.txt", Body=b"content"
+            )
+            version_id = resp["VersionId"]
+
+            cache_dir = tmp_path / "cache"
+            storage = S3Storage(client=client)
+            cache = FileCache(cache_dir=cache_dir)
+
+            # Get version metadata to check timestamp
+            versions = storage.list_versions("s3://versioned-bucket/data.txt")
+            version_meta = next(v for v in versions if v.version_id == version_id)
+
+            dataset = Dataset(name="data", source="s3://versioned-bucket/data.txt")
+            catalog = Catalog(
+                datasets=[dataset],
+                storage=storage,
+                cache=cache,
+                cache_dir=cache_dir,
+            )
+
+            # Fetch with version_id
+            path = catalog.fetch("data", version_id=version_id)
+
+            # Extract date from filename and compare with version timestamp
+            filename = path.name
+            date_part = filename[:-4]  # Remove .txt extension
+            # Parse: YYYY-MM-DDTHHMMSS
+            year = int(date_part[0:4])
+            month = int(date_part[5:7])
+            day = int(date_part[8:10])
+            hour = int(date_part[11:13])
+            minute = int(date_part[13:15])
+            second = int(date_part[15:17])
+
+            from datetime import UTC
+
+            expected_dt = version_meta.last_modified.replace(tzinfo=UTC)
+            assert year == expected_dt.year
+            assert month == expected_dt.month
+            assert day == expected_dt.day
+            assert hour == expected_dt.hour
+            assert minute == expected_dt.minute
+            assert second == expected_dt.second
+
+    def test_fetch_version_preserves_file_extension(self, tmp_path: Path) -> None:
+        """The file extension from original source should be preserved."""
+        import boto3
+        from moto import mock_aws
+
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import S3Storage
+        from datacachalog.core.services import Catalog
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket="versioned-bucket")
+            client.put_bucket_versioning(
+                Bucket="versioned-bucket",
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+
+            # Test with different extensions
+            for ext in [".txt", ".parquet", ".csv", ".json"]:
+                key = f"data{ext}"
+                resp = client.put_object(
+                    Bucket="versioned-bucket", Key=key, Body=b"content"
+                )
+                version_id = resp["VersionId"]
+
+                cache_dir = tmp_path / "cache"
+                storage = S3Storage(client=client)
+                cache = FileCache(cache_dir=cache_dir)
+
+                dataset = Dataset(name="data", source=f"s3://versioned-bucket/{key}")
+                catalog = Catalog(
+                    datasets=[dataset],
+                    storage=storage,
+                    cache=cache,
+                    cache_dir=cache_dir,
+                )
+
+                # Fetch with version_id
+                path = catalog.fetch("data", version_id=version_id)
+
+                # Extension should be preserved
+                assert path.suffix == ext
+                assert path.name.endswith(ext)
 
 
 @pytest.mark.core
@@ -1715,10 +1888,9 @@ class TestFetchAsOf:
                 VersioningConfiguration={"Status": "Enabled"},
             )
 
-            resp = client.put_object(
+            client.put_object(
                 Bucket="versioned-bucket", Key="data.txt", Body=b"content"
             )
-            version_id = resp["VersionId"]
 
             cache_dir = tmp_path / "cache"
             storage = S3Storage(client=client)
@@ -1736,11 +1908,13 @@ class TestFetchAsOf:
             as_of = versions[0].last_modified + timedelta(seconds=1)
 
             # Fetch with as_of
-            catalog.fetch("data", as_of=as_of)
+            path = catalog.fetch("data", as_of=as_of)
 
-            # Should have cached with version-specific key
-            version_cache_key = f"data@{version_id}"
-            assert cache.get(version_cache_key) is not None
+            # Should have cached with date-based key (not {name}@{version_id})
+            filename = path.name
+            assert filename.endswith(".txt")
+            # Should be date-based format: YYYY-MM-DDTHHMMSS.txt
+            assert cache.get(filename) is not None
 
     @pytest.mark.tier(1)
     def test_fetch_as_of_and_version_id_mutually_exclusive(
