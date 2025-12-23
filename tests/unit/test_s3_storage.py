@@ -36,6 +36,7 @@ def versioned_s3_client() -> Any:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestHead:
     """Tests for head() method."""
 
@@ -86,6 +87,7 @@ class TestHead:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestDownload:
     """Tests for download() method."""
 
@@ -143,6 +145,7 @@ class TestDownload:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestUpload:
     """Tests for upload() method."""
 
@@ -198,6 +201,7 @@ class TestUpload:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestList:
     """Tests for list() method."""
 
@@ -296,6 +300,7 @@ class TestList:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestProtocolConformance:
     """Tests for StoragePort protocol conformance."""
 
@@ -308,6 +313,7 @@ class TestProtocolConformance:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestUriParsing:
     """Tests for S3 URI parsing."""
 
@@ -335,6 +341,7 @@ class TestUriParsing:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestPackageExport:
     """Tests for S3Storage export from package root."""
 
@@ -346,6 +353,7 @@ class TestPackageExport:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestListVersions:
     """Tests for list_versions() method."""
 
@@ -455,6 +463,7 @@ class TestListVersions:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestHeadVersion:
     """Tests for head_version() method."""
 
@@ -498,6 +507,7 @@ class TestHeadVersion:
 
 
 @pytest.mark.storage
+@pytest.mark.tra("Adapter.S3Storage")
 class TestDownloadVersion:
     """Tests for download_version() method."""
 

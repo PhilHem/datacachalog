@@ -9,6 +9,7 @@ from datacachalog.core.models import CacheMetadata
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestGet:
     """Tests for get() method."""
 
@@ -30,6 +31,7 @@ class TestGet:
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestPut:
     """Tests for put() method."""
 
@@ -88,6 +90,7 @@ class TestPut:
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestInvalidate:
     """Tests for invalidate() method."""
 
@@ -115,6 +118,7 @@ class TestInvalidate:
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestInvalidatePrefix:
     """Tests for invalidate_prefix() method."""
 
@@ -197,6 +201,7 @@ class TestInvalidatePrefix:
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestProtocolConformance:
     """Tests for CachePort protocol conformance."""
 
@@ -210,6 +215,7 @@ class TestProtocolConformance:
 
 
 @pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
 class TestCorruptMetadata:
     """Tests for handling corrupt cache metadata."""
 
