@@ -10,6 +10,7 @@ from datacachalog.core.ports import ProgressCallback
 
 @pytest.mark.core
 @pytest.mark.tra("UseCase.Push")
+@pytest.mark.tier(1)
 class TestPush:
     """Tests for push() method."""
 

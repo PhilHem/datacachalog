@@ -191,6 +191,7 @@ class TestCatalogList:
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Fetch")
+@pytest.mark.tier(1)
 class TestCatalogFetch:
     """Tests for catalog fetch command."""
 
@@ -1420,6 +1421,7 @@ class TestCatalogVersions:
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Push")
+@pytest.mark.tier(1)
 class TestCatalogPush:
     """Tests for catalog push command."""
 

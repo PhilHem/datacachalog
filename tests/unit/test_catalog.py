@@ -8,6 +8,7 @@ from datacachalog import Dataset
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.CatalogInit")
 @pytest.mark.tier(1)
 class TestCatalogInit:
     """Tests for Catalog instantiation."""
@@ -28,6 +29,7 @@ class TestCatalogInit:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.GetDataset")
 @pytest.mark.tier(1)
 class TestGetDataset:
     """Tests for dataset lookup."""
@@ -85,6 +87,7 @@ class TestGetDataset:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
 @pytest.mark.tier(1)
 class TestFetchMissingCacheDir:
     """Tests for fetch() when cache configuration is missing."""
@@ -117,6 +120,7 @@ class TestFetchMissingCacheDir:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
 @pytest.mark.tier(1)
 class TestFetch:
     """Tests for fetch() method."""
@@ -305,6 +309,7 @@ class TestFetch:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.IsStale")
 @pytest.mark.tier(1)
 class TestIsStale:
     """Tests for is_stale() method."""
@@ -398,6 +403,7 @@ class TestIsStale:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Invalidate")
 @pytest.mark.tier(1)
 class TestInvalidate:
     """Tests for invalidate() method."""
@@ -477,6 +483,7 @@ class TestInvalidate:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Invalidate")
 @pytest.mark.tier(1)
 class TestInvalidateGlob:
     """Tests for invalidate_glob() method."""
@@ -624,6 +631,7 @@ class TestInvalidateGlob:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
 @pytest.mark.tier(1)
 class TestFetchWithProgress:
     """Tests for fetch() with progress reporting."""
@@ -754,6 +762,7 @@ class TestFetchWithProgress:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.FetchAll")
 @pytest.mark.tier(1)
 class TestFetchAll:
     """Tests for fetch_all() method."""
@@ -1012,6 +1021,7 @@ class TestFetchAll:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.FetchAll")
 @pytest.mark.tier(1)
 class TestFetchAllParallel:
     """Tests for parallel fetch_all()."""
@@ -1142,6 +1152,7 @@ class TestFetchAllParallel:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Domain.Catalog")
 @pytest.mark.tier(1)
 class TestDatasetsProperty:
     """Tests for the catalog.datasets property."""
@@ -1185,6 +1196,7 @@ class TestDatasetsProperty:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.CatalogInit")
 @pytest.mark.tier(1)
 class TestCatalogFromDirectory:
     """Tests for Catalog.from_directory() factory method."""
@@ -1303,6 +1315,7 @@ class TestCatalogFromDirectory:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.Fetch")
 @pytest.mark.tier(1)
 class TestFetchGlob:
     """Tests for glob pattern support in fetch()."""
@@ -1518,6 +1531,7 @@ class TestFetchGlob:
 
 @pytest.mark.core
 @pytest.mark.tra("UseCase.Versions")
+@pytest.mark.tier(1)
 class TestVersions:
     """Tests for catalog.versions() method."""
 
@@ -1981,6 +1995,7 @@ class TestFetchVersion:
 
 @pytest.mark.core
 @pytest.mark.tra("UseCase.FetchAsOf")
+@pytest.mark.tier(1)
 class TestFetchAsOf:
     """Tests for fetch() with as_of parameter."""
 
@@ -2198,7 +2213,7 @@ class TestFetchAsOf:
 
 
 @pytest.mark.core
-@pytest.mark.tra("Domain.Catalog")
+@pytest.mark.tra("Domain.ConcurrencyBoundary")
 @pytest.mark.tier(1)
 class TestConcurrencyBoundary:
     """Tests to verify concurrency boundary compliance in core domain."""
