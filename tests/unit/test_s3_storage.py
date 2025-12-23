@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import boto3
 import pytest
@@ -12,7 +13,7 @@ from datacachalog.core.ports import StoragePort
 
 
 @pytest.fixture
-def s3_client():
+def s3_client() -> Any:
     """Create a mocked S3 client with a test bucket."""
     with mock_aws():
         client = boto3.client("s3", region_name="us-east-1")
@@ -21,7 +22,7 @@ def s3_client():
 
 
 @pytest.fixture
-def versioned_s3_client():
+def versioned_s3_client() -> Any:
     """Create a mocked S3 client with a versioned bucket."""
     with mock_aws():
         client = boto3.client("s3", region_name="us-east-1")
@@ -38,7 +39,7 @@ def versioned_s3_client():
 class TestHead:
     """Tests for head() method."""
 
-    def test_head_returns_file_metadata(self, s3_client) -> None:
+    def test_head_returns_file_metadata(self, s3_client: Any) -> None:
         """head() should return FileMetadata with etag, last_modified, and size."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -56,7 +57,7 @@ class TestHead:
         assert isinstance(metadata.last_modified, datetime)
         assert metadata.size == 11  # "hello world" is 11 bytes
 
-    def test_head_etag_from_s3(self, s3_client) -> None:
+    def test_head_etag_from_s3(self, s3_client: Any) -> None:
         """ETag should come directly from S3 response."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -66,10 +67,11 @@ class TestHead:
         metadata = storage.head("s3://test-bucket/test.txt")
 
         # S3 ETags are quoted MD5 hashes for non-multipart uploads
+        assert metadata.etag is not None
         assert metadata.etag.startswith('"')
         assert metadata.etag.endswith('"')
 
-    def test_head_missing_key_raises_storage_not_found(self, s3_client) -> None:
+    def test_head_missing_key_raises_storage_not_found(self, s3_client: Any) -> None:
         """head() should raise StorageNotFoundError for missing keys."""
         from datacachalog.adapters.storage import S3Storage
         from datacachalog.core.exceptions import StorageNotFoundError
@@ -87,7 +89,7 @@ class TestHead:
 class TestDownload:
     """Tests for download() method."""
 
-    def test_download_copies_file(self, s3_client, tmp_path: Path) -> None:
+    def test_download_copies_file(self, s3_client: Any, tmp_path: Path) -> None:
         """download() should download file to destination."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -100,7 +102,7 @@ class TestDownload:
         assert dest.exists()
         assert dest.read_text() == "hello world"
 
-    def test_download_reports_progress(self, s3_client, tmp_path: Path) -> None:
+    def test_download_reports_progress(self, s3_client: Any, tmp_path: Path) -> None:
         """download() should call progress callback with bytes."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -123,7 +125,7 @@ class TestDownload:
         assert progress_calls[-1][1] == 1000
 
     def test_download_missing_key_raises_storage_not_found(
-        self, s3_client, tmp_path: Path
+        self, s3_client: Any, tmp_path: Path
     ) -> None:
         """download() should raise StorageNotFoundError for missing keys."""
         from datacachalog.adapters.storage import S3Storage
@@ -144,7 +146,7 @@ class TestDownload:
 class TestUpload:
     """Tests for upload() method."""
 
-    def test_upload_copies_file(self, s3_client, tmp_path: Path) -> None:
+    def test_upload_copies_file(self, s3_client: Any, tmp_path: Path) -> None:
         """upload() should upload local file to S3."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -158,7 +160,7 @@ class TestUpload:
         response = s3_client.get_object(Bucket="test-bucket", Key="uploaded.txt")
         assert response["Body"].read() == b"hello world"
 
-    def test_upload_to_nested_key(self, s3_client, tmp_path: Path) -> None:
+    def test_upload_to_nested_key(self, s3_client: Any, tmp_path: Path) -> None:
         """upload() should handle nested S3 keys."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -174,7 +176,7 @@ class TestUpload:
         )
         assert response["Body"].read() == b"hello world"
 
-    def test_upload_reports_progress(self, s3_client, tmp_path: Path) -> None:
+    def test_upload_reports_progress(self, s3_client: Any, tmp_path: Path) -> None:
         """upload() should call progress callback with bytes."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -199,7 +201,7 @@ class TestUpload:
 class TestList:
     """Tests for list() method."""
 
-    def test_list_returns_objects_with_prefix(self, s3_client) -> None:
+    def test_list_returns_objects_with_prefix(self, s3_client: Any) -> None:
         """list() should return all objects matching prefix."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -215,7 +217,7 @@ class TestList:
         assert "s3://test-bucket/data/b.parquet" in result
         assert "s3://test-bucket/other/c.parquet" not in result
 
-    def test_list_with_pattern_filters_by_glob(self, s3_client) -> None:
+    def test_list_with_pattern_filters_by_glob(self, s3_client: Any) -> None:
         """list() with pattern should filter by glob."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -231,7 +233,7 @@ class TestList:
         assert "s3://test-bucket/data/b.parquet" in result
         assert "s3://test-bucket/data/c.csv" not in result
 
-    def test_list_returns_sorted_alphabetically(self, s3_client) -> None:
+    def test_list_returns_sorted_alphabetically(self, s3_client: Any) -> None:
         """list() should return results sorted alphabetically."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -248,7 +250,7 @@ class TestList:
             "s3://test-bucket/data/z.txt",
         ]
 
-    def test_list_empty_prefix_returns_empty_list(self, s3_client) -> None:
+    def test_list_empty_prefix_returns_empty_list(self, s3_client: Any) -> None:
         """list() with no matching objects should return empty list."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -257,7 +259,7 @@ class TestList:
 
         assert result == []
 
-    def test_list_handles_pagination(self, s3_client) -> None:
+    def test_list_handles_pagination(self, s3_client: Any) -> None:
         """list() should handle paginated results."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -272,7 +274,7 @@ class TestList:
 
         assert len(result) == 25
 
-    def test_list_recursive_pattern(self, s3_client) -> None:
+    def test_list_recursive_pattern(self, s3_client: Any) -> None:
         """list() with ** pattern should match nested keys."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -297,7 +299,7 @@ class TestList:
 class TestProtocolConformance:
     """Tests for StoragePort protocol conformance."""
 
-    def test_satisfies_storage_port(self, s3_client) -> None:
+    def test_satisfies_storage_port(self, s3_client: Any) -> None:
         """S3Storage should satisfy StoragePort protocol."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -309,7 +311,7 @@ class TestProtocolConformance:
 class TestUriParsing:
     """Tests for S3 URI parsing."""
 
-    def test_parses_simple_uri(self, s3_client) -> None:
+    def test_parses_simple_uri(self, s3_client: Any) -> None:
         """Should parse s3://bucket/key correctly."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -320,7 +322,7 @@ class TestUriParsing:
 
         assert metadata.size == 4
 
-    def test_parses_nested_key(self, s3_client) -> None:
+    def test_parses_nested_key(self, s3_client: Any) -> None:
         """Should parse s3://bucket/path/to/file correctly."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -347,7 +349,9 @@ class TestPackageExport:
 class TestListVersions:
     """Tests for list_versions() method."""
 
-    def test_list_versions_returns_object_versions(self, versioned_s3_client) -> None:
+    def test_list_versions_returns_object_versions(
+        self, versioned_s3_client: Any
+    ) -> None:
         """list_versions() should return list of ObjectVersion."""
         from datacachalog.adapters.storage import S3Storage
         from datacachalog.core.models import ObjectVersion
@@ -366,7 +370,7 @@ class TestListVersions:
         assert len(versions) == 2
         assert all(isinstance(v, ObjectVersion) for v in versions)
 
-    def test_list_versions_sorted_newest_first(self, versioned_s3_client) -> None:
+    def test_list_versions_sorted_newest_first(self, versioned_s3_client: Any) -> None:
         """list_versions() should return newest version first."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -385,7 +389,7 @@ class TestListVersions:
         # Newer version should come first
         assert versions[0].last_modified >= versions[1].last_modified
 
-    def test_list_versions_with_limit(self, versioned_s3_client) -> None:
+    def test_list_versions_with_limit(self, versioned_s3_client: Any) -> None:
         """list_versions() should respect limit parameter."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -400,7 +404,7 @@ class TestListVersions:
 
         assert len(versions) == 3
 
-    def test_list_versions_includes_version_id(self, versioned_s3_client) -> None:
+    def test_list_versions_includes_version_id(self, versioned_s3_client: Any) -> None:
         """list_versions() should include version_id for each version."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -414,7 +418,7 @@ class TestListVersions:
         assert len(versions) == 1
         assert versions[0].version_id is not None
 
-    def test_list_versions_includes_metadata(self, versioned_s3_client) -> None:
+    def test_list_versions_includes_metadata(self, versioned_s3_client: Any) -> None:
         """list_versions() should include etag and size."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -428,7 +432,9 @@ class TestListVersions:
         assert versions[0].etag is not None
         assert versions[0].size == 5
 
-    def test_list_versions_handles_delete_markers(self, versioned_s3_client) -> None:
+    def test_list_versions_handles_delete_markers(
+        self, versioned_s3_client: Any
+    ) -> None:
         """list_versions() should include delete markers."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -452,7 +458,7 @@ class TestListVersions:
 class TestHeadVersion:
     """Tests for head_version() method."""
 
-    def test_head_version_returns_file_metadata(self, versioned_s3_client) -> None:
+    def test_head_version_returns_file_metadata(self, versioned_s3_client: Any) -> None:
         """head_version() should return FileMetadata for specific version."""
         from datacachalog.adapters.storage import S3Storage
 
@@ -472,7 +478,9 @@ class TestHeadVersion:
         assert metadata.etag is not None
         assert metadata.size == 8  # "version2" is 8 bytes
 
-    def test_head_version_not_found_raises_error(self, versioned_s3_client) -> None:
+    def test_head_version_not_found_raises_error(
+        self, versioned_s3_client: Any
+    ) -> None:
         """head_version() should raise StorageNotFoundError for missing version."""
         from datacachalog.adapters.storage import S3Storage
         from datacachalog.core.exceptions import StorageNotFoundError
@@ -494,7 +502,7 @@ class TestDownloadVersion:
     """Tests for download_version() method."""
 
     def test_download_version_downloads_specific_version(
-        self, versioned_s3_client, tmp_path: Path
+        self, versioned_s3_client: Any, tmp_path: Path
     ) -> None:
         """download_version() should download specific version content."""
         from datacachalog.adapters.storage import S3Storage
@@ -523,7 +531,7 @@ class TestDownloadVersion:
         assert dest.read_text() == "first version"
 
     def test_download_version_reports_progress(
-        self, versioned_s3_client, tmp_path: Path
+        self, versioned_s3_client: Any, tmp_path: Path
     ) -> None:
         """download_version() should call progress callback."""
         from datacachalog.adapters.storage import S3Storage
@@ -551,7 +559,7 @@ class TestDownloadVersion:
         assert progress_calls[-1][0] == 1000
 
     def test_download_version_not_found_raises_error(
-        self, versioned_s3_client, tmp_path: Path
+        self, versioned_s3_client: Any, tmp_path: Path
     ) -> None:
         """download_version() should raise StorageNotFoundError for missing version."""
         from datacachalog.adapters.storage import S3Storage

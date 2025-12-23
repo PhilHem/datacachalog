@@ -33,7 +33,9 @@ class TestBasicUsage:
             cache_dir=tmp_path / "cache",
         )
 
-        path = catalog.fetch("customers")
+        result = catalog.fetch("customers")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         assert path.exists()
         assert path.read_bytes() == b"mock parquet data"
@@ -66,10 +68,22 @@ class TestParallelFetch:
         paths = catalog.fetch_all()
 
         assert len(paths) == 3
-        assert all(p.exists() for p in paths.values())
-        assert paths["orders"].read_text() == "order_id,amount\n1,100"
-        assert paths["products"].read_text() == "product_id,name\n1,Widget"
-        assert paths["customers"].read_text() == "id,name\n1,Alice"
+        # Type narrowing: fetch_all returns dict[str, Path | list[Path]]
+        # For single-file datasets, values are Path
+        assert all(
+            (isinstance(p, Path) and p.exists())
+            or (isinstance(p, list) and all(pp.exists() for pp in p))
+            for p in paths.values()
+        )
+        orders_path = paths["orders"]
+        assert isinstance(orders_path, Path)  # Type narrowing
+        assert orders_path.read_text() == "order_id,amount\n1,100"
+        products_path = paths["products"]
+        assert isinstance(products_path, Path)  # Type narrowing
+        assert products_path.read_text() == "product_id,name\n1,Widget"
+        customers_path = paths["customers"]
+        assert isinstance(customers_path, Path)  # Type narrowing
+        assert customers_path.read_text() == "id,name\n1,Alice"
 
 
 @pytest.mark.core
@@ -158,6 +172,8 @@ class TestLocalDevelopment:
             cache_dir=tmp_path / "cache",
         )
 
-        path = catalog.fetch("users")
+        result = catalog.fetch("users")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         assert path.read_text() == '{"users": []}'

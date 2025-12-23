@@ -114,7 +114,9 @@ class TestPush:
 
         # Act: push then fetch
         catalog.push("customers", local_file)
-        path = catalog.fetch("customers")
+        result = catalog.fetch("customers")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         # Assert: fetch returns the pushed content
         assert path.read_text() == "pushed content"

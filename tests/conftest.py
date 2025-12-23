@@ -54,7 +54,9 @@ def fake_storage() -> StoragePort:
         def download(self, source: str, dest: Path, progress: ProgressCallback) -> None:
             pass
 
-        def upload(self, local: Path, dest: str) -> None:
+        def upload(
+            self, local: Path, dest: str, progress: ProgressCallback | None = None
+        ) -> None:
             pass
 
         def head(self, source: str) -> FileMetadata:

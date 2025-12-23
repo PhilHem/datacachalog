@@ -141,7 +141,9 @@ class TestFetch:
         catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
 
         # Act
-        path = catalog.fetch("customers")
+        result = catalog.fetch("customers")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         # Assert
         assert path.exists()
@@ -171,13 +173,17 @@ class TestFetch:
         catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
 
         # First fetch populates cache
-        path1 = catalog.fetch("customers")
+        result1 = catalog.fetch("customers")
+        assert isinstance(result1, Path)  # Type narrowing
+        path1 = result1
 
         # Modify cached file to detect if re-downloaded
         path1.write_text("MODIFIED")
 
         # Second fetch (remote unchanged) should return cached
-        path2 = catalog.fetch("customers")
+        result2 = catalog.fetch("customers")
+        assert isinstance(result2, Path)  # Type narrowing
+        path2 = result2
 
         assert path2 == path1
         assert path2.read_text() == "MODIFIED"  # Proves no re-download
@@ -206,14 +212,18 @@ class TestFetch:
         catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
 
         # First fetch populates cache
-        path1 = catalog.fetch("customers")
+        result1 = catalog.fetch("customers")
+        assert isinstance(result1, Path)  # Type narrowing
+        path1 = result1
         original_content = path1.read_text()
 
         # Modify remote file (changes ETag)
         remote_file.write_text("id,name\n1,Alice\n2,Bob\n")
 
         # Second fetch should detect stale and re-download
-        path2 = catalog.fetch("customers")
+        result2 = catalog.fetch("customers")
+        assert isinstance(result2, Path)  # Type narrowing
+        path2 = result2
 
         assert path2.read_text() == "id,name\n1,Alice\n2,Bob\n"
         assert path2.read_text() != original_content
@@ -246,7 +256,9 @@ class TestFetch:
             cache_dir=cache_dir,
         )
 
-        path = catalog.fetch("data")
+        result = catalog.fetch("data")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         # Should derive path from source filename
         assert path.exists()
@@ -441,14 +453,18 @@ class TestInvalidate:
         catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
 
         # Fetch and modify cached file
-        path = catalog.fetch("customers")
+        result = catalog.fetch("customers")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
         path.write_text("MODIFIED")
 
         # Invalidate
         catalog.invalidate("customers")
 
         # Fetch again - should re-download
-        path2 = catalog.fetch("customers")
+        result2 = catalog.fetch("customers")
+        assert isinstance(result2, Path)  # Type narrowing
+        path2 = result2
 
         # Assert: content is fresh (not modified)
         assert path2.read_text() == "id,name\n1,Alice\n"
@@ -553,7 +569,9 @@ class TestInvalidateGlob:
         )
 
         # Fetch and modify cached file
-        paths = catalog.fetch("data")
+        result = catalog.fetch("data")
+        assert isinstance(result, list)  # Type narrowing for glob
+        paths = result
         paths[0].write_text("MODIFIED")
 
         # Invalidate
@@ -563,7 +581,9 @@ class TestInvalidateGlob:
         (storage_dir / "data.txt").write_text("updated")
 
         # Fetch again - should get updated content
-        paths2 = catalog.fetch("data")
+        result2 = catalog.fetch("data")
+        assert isinstance(result2, list)  # Type narrowing for glob
+        paths2 = result2
         assert paths2[0].read_text() == "updated"
 
     def test_invalidate_glob_on_non_glob_dataset_raises(self, tmp_path: Path) -> None:
@@ -625,7 +645,9 @@ class TestFetchWithProgress:
 
         # Act - should not raise
         reporter = NullProgressReporter()
-        path = catalog.fetch("customers", progress=reporter)
+        result = catalog.fetch("customers", progress=reporter)
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         # Assert
         assert path.exists()
@@ -773,8 +795,12 @@ class TestFetchAll:
         # Assert
         assert isinstance(result, dict)
         assert set(result.keys()) == {"alpha", "beta"}
-        assert result["alpha"].read_text() == "a content"
-        assert result["beta"].read_text() == "b content"
+        alpha_path = result["alpha"]
+        assert isinstance(alpha_path, Path)  # Type narrowing
+        assert alpha_path.read_text() == "a content"
+        beta_path = result["beta"]
+        assert isinstance(beta_path, Path)  # Type narrowing
+        assert beta_path.read_text() == "b content"
 
     def test_fetch_all_accepts_progress_parameter(self, tmp_path: Path) -> None:
         """fetch_all() should accept optional progress reporter."""
@@ -1132,7 +1158,9 @@ class TestCatalogFromDirectory:
         catalog = Catalog.from_directory([dataset], directory=tmp_path)
 
         # Should be able to fetch
-        path = catalog.fetch("test")
+        result = catalog.fetch("test")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
         assert path.exists()
         assert path.read_text() == "test content"
 
@@ -1225,7 +1253,9 @@ class TestFetchGlob:
         )
 
         # Act
-        paths = catalog.fetch("data")
+        result = catalog.fetch("data")
+        assert isinstance(result, list)  # Type narrowing for glob
+        paths = result
 
         # Assert: only .parquet files matched
         assert len(paths) == 2
@@ -1360,7 +1390,9 @@ class TestFetchGlob:
         file2.write_text("updated 2")
 
         # Second fetch
-        paths = catalog.fetch("files")
+        result = catalog.fetch("files")
+        assert isinstance(result, list)  # Type narrowing for glob
+        paths = result
 
         # Assert: file2 was re-downloaded with new content
         contents = {p.read_text() for p in paths}
@@ -1549,7 +1581,9 @@ class TestFetchVersion:
             )
 
             # Fetch the first version (not the latest)
-            path = catalog.fetch("data", version_id=v1_id)
+            result = catalog.fetch("data", version_id=v1_id)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             assert path.exists()
             assert path.read_text() == "first version"
@@ -1589,7 +1623,9 @@ class TestFetchVersion:
             )
 
             # Fetch with version_id
-            path = catalog.fetch("data", version_id=version_id)
+            result = catalog.fetch("data", version_id=version_id)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             # Cache key should be date-based (not {name}@{version_id})
             filename = path.name
@@ -1639,10 +1675,14 @@ class TestFetchVersion:
             )
 
             # Fetch latest (normal)
-            latest_path = catalog.fetch("data")
+            result_latest = catalog.fetch("data")
+            assert isinstance(result_latest, Path)  # Type narrowing
+            latest_path = result_latest
 
             # Fetch specific old version
-            old_path = catalog.fetch("data", version_id=v1_id)
+            result_old = catalog.fetch("data", version_id=v1_id)
+            assert isinstance(result_old, Path)  # Type narrowing
+            old_path = result_old
 
             # Both should exist with different content
             assert latest_path.read_text() == "new version"
@@ -1690,7 +1730,9 @@ class TestFetchVersion:
             )
 
             # Fetch with version_id
-            path = catalog.fetch("data", version_id=version_id)
+            result = catalog.fetch("data", version_id=version_id)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             # File path should be date-based format: YYYY-MM-DDTHHMMSS.ext
             filename = path.name
@@ -1747,7 +1789,9 @@ class TestFetchVersion:
             )
 
             # Fetch with version_id
-            path = catalog.fetch("data", version_id=version_id)
+            result = catalog.fetch("data", version_id=version_id)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             # Extract date from filename and compare with version timestamp
             filename = path.name
@@ -1808,7 +1852,9 @@ class TestFetchVersion:
                 )
 
                 # Fetch with version_id
-                path = catalog.fetch("data", version_id=version_id)
+                result = catalog.fetch("data", version_id=version_id)
+                assert isinstance(result, Path)  # Type narrowing
+                path = result
 
                 # Extension should be preserved
                 assert path.suffix == ext
@@ -1863,7 +1909,9 @@ class TestFetchAsOf:
 
             # Use a time in the future (should get the only version)
             future_time = v1_timestamp + timedelta(days=1)
-            path = catalog.fetch("data", as_of=future_time)
+            result = catalog.fetch("data", as_of=future_time)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             assert path.exists()
             assert path.read_text() == "version 1"
@@ -1908,7 +1956,9 @@ class TestFetchAsOf:
             as_of = versions[0].last_modified + timedelta(seconds=1)
 
             # Fetch with as_of
-            path = catalog.fetch("data", as_of=as_of)
+            result = catalog.fetch("data", as_of=as_of)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
             # Should have cached with date-based key (not {name}@{version_id})
             filename = path.name

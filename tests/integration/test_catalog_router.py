@@ -6,13 +6,10 @@ mixed URI schemes (S3 and local filesystem) transparently.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import Any
 
 import pytest
-
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from datacachalog import Catalog, Dataset
 from datacachalog.adapters.cache import FileCache
@@ -24,7 +21,9 @@ from datacachalog.adapters.storage.router import RouterStorage
 class TestCatalogRouterMixedSchemes:
     """Tests for Catalog using RouterStorage with mixed URI schemes."""
 
-    def test_fetch_routes_s3_uri_to_s3_storage(self, s3_client, tmp_path: Path) -> None:
+    def test_fetch_routes_s3_uri_to_s3_storage(
+        self, s3_client: Any, tmp_path: Path
+    ) -> None:
         """Catalog with RouterStorage should fetch s3:// URIs via S3Storage."""
         # Setup S3 file
         s3_client.put_object(Bucket="test-bucket", Key="data.csv", Body=b"s3 content")
@@ -42,7 +41,9 @@ class TestCatalogRouterMixedSchemes:
             datasets=[dataset], storage=router, cache=cache, cache_dir=cache_dir
         )
 
-        path = catalog.fetch("s3data")
+        result = catalog.fetch("s3data")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         assert path.exists()
         assert path.read_text() == "s3 content"
@@ -65,13 +66,15 @@ class TestCatalogRouterMixedSchemes:
             datasets=[dataset], storage=router, cache=cache, cache_dir=cache_dir
         )
 
-        path = catalog.fetch("localdata")
+        result = catalog.fetch("localdata")
+        assert isinstance(result, Path)  # Type narrowing
+        path = result
 
         assert path.exists()
         assert path.read_text() == "local content"
 
     def test_fetch_mixed_datasets_in_single_catalog(
-        self, s3_client, tmp_path: Path
+        self, s3_client: Any, tmp_path: Path
     ) -> None:
         """Catalog should handle both S3 and local datasets simultaneously."""
         # Setup S3 file
@@ -100,8 +103,12 @@ class TestCatalogRouterMixedSchemes:
         )
 
         # Fetch both
-        cloud_path = catalog.fetch("cloud")
-        disk_path = catalog.fetch("disk")
+        result_cloud = catalog.fetch("cloud")
+        assert isinstance(result_cloud, Path)  # Type narrowing
+        cloud_path = result_cloud
+        result_disk = catalog.fetch("disk")
+        assert isinstance(result_disk, Path)  # Type narrowing
+        disk_path = result_disk
 
         assert cloud_path.read_text() == "from s3"
         assert disk_path.read_text() == "from disk"
@@ -111,7 +118,7 @@ class TestCatalogRouterMixedSchemes:
 class TestCatalogRouterStaleness:
     """Tests for staleness detection with RouterStorage."""
 
-    def test_is_stale_works_with_router(self, s3_client, tmp_path: Path) -> None:
+    def test_is_stale_works_with_router(self, s3_client: Any, tmp_path: Path) -> None:
         """RouterStorage should correctly report staleness from S3."""
         s3_client.put_object(Bucket="test-bucket", Key="data.csv", Body=b"original")
 

@@ -184,12 +184,15 @@ class TestCreateRouter:
 
     def test_accepts_custom_s3_client(self) -> None:
         """create_router() should accept custom boto3 client for S3."""
+        from datacachalog.adapters.storage import S3Storage
         from datacachalog.adapters.storage.router import create_router
 
         mock_client = Mock()
         router = create_router(s3_client=mock_client)
 
-        assert router._backends["s3"]._client is mock_client
+        s3_backend = router._backends["s3"]
+        assert isinstance(s3_backend, S3Storage)  # Type narrowing
+        assert s3_backend._client is mock_client
 
 
 @pytest.mark.storage

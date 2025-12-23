@@ -104,7 +104,9 @@ class TestRichProgressReporterIntegration:
 
         # Act
         with RichProgressReporter() as reporter:
-            path = catalog.fetch("test", progress=reporter)
+            result = catalog.fetch("test", progress=reporter)
+            assert isinstance(result, Path)  # Type narrowing
+            path = result
 
         # Assert
         assert path.exists()

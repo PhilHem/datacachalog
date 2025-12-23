@@ -26,7 +26,9 @@ catalog = Catalog(
 )
 
 # Step 1: Fetch current data
-input_path = catalog.fetch("daily_report")
+result = catalog.fetch("daily_report")
+assert isinstance(result, Path)  # Type narrowing: single-file dataset
+input_path = result
 print(f"Downloaded report from: {input_path}")
 
 # Step 2: Process the data (your business logic here)

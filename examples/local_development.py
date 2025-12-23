@@ -87,8 +87,12 @@ if __name__ == "__main__":
     catalog = create_dev_catalog()
 
     # Your code works the same way in dev and prod
-    users_path = catalog.fetch("users")
-    events_path = catalog.fetch("events")
+    users_result = catalog.fetch("users")
+    assert isinstance(users_result, Path)  # Type narrowing: single-file dataset
+    users_path = users_result
+    events_result = catalog.fetch("events")
+    assert isinstance(events_result, Path)  # Type narrowing: single-file dataset
+    events_path = events_result
 
     print(f"Users: {users_path.read_text()}")
     print(f"Events: {events_path.read_text()}")

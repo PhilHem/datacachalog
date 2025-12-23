@@ -32,10 +32,10 @@ catalog = Catalog(
 
 
 # Pattern 1: Handle unknown dataset names
-def fetch_with_suggestions(catalog: Catalog, name: str) -> Path:
+def fetch_with_suggestions(catalog: Catalog, name: str) -> Path | list[Path]:
     """Fetch dataset with helpful error messages."""
     try:
-        return catalog.fetch(name)
+        return catalog.fetch(name)  # Returns Path | list[Path]
     except DatasetNotFoundError as e:
         # recovery_hint lists available datasets
         print(f"Dataset '{name}' not found.")
@@ -44,10 +44,12 @@ def fetch_with_suggestions(catalog: Catalog, name: str) -> Path:
 
 
 # Pattern 2: Handle missing remote files
-def fetch_with_storage_fallback(catalog: Catalog, name: str) -> Path | None:
+def fetch_with_storage_fallback(
+    catalog: Catalog, name: str
+) -> Path | list[Path] | None:
     """Fetch dataset, returning None if remote file doesn't exist."""
     try:
-        return catalog.fetch(name)
+        return catalog.fetch(name)  # Returns Path | list[Path]
     except StorageNotFoundError as e:
         print(f"Remote file not found: {e.source}")
         print(f"Hint: {e.recovery_hint}")
@@ -55,10 +57,10 @@ def fetch_with_storage_fallback(catalog: Catalog, name: str) -> Path | None:
 
 
 # Pattern 3: Handle permission errors
-def fetch_with_access_check(catalog: Catalog, name: str) -> Path | None:
+def fetch_with_access_check(catalog: Catalog, name: str) -> Path | list[Path] | None:
     """Fetch dataset, handling permission errors gracefully."""
     try:
-        return catalog.fetch(name)
+        return catalog.fetch(name)  # Returns Path | list[Path]
     except StorageAccessError as e:
         print(f"Access denied to: {e.source}")
         print(f"Hint: {e.recovery_hint}")
@@ -66,10 +68,10 @@ def fetch_with_access_check(catalog: Catalog, name: str) -> Path | None:
 
 
 # Pattern 4: Catch-all for any library error
-def fetch_safe(catalog: Catalog, name: str) -> Path | None:
+def fetch_safe(catalog: Catalog, name: str) -> Path | list[Path] | None:
     """Fetch dataset with comprehensive error handling."""
     try:
-        return catalog.fetch(name)
+        return catalog.fetch(name)  # Returns Path | list[Path]
     except DatasetNotFoundError as e:
         print(f"Unknown dataset: {e.name}")
         print(f"Available: {e.available}")
