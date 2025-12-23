@@ -897,6 +897,110 @@ class TestFetchAll:
 
         assert result == {}
 
+    @pytest.mark.tra("Domain.Catalog")
+    @pytest.mark.tier(1)
+    def test_fetch_all_without_executor_uses_sequential_execution(
+        self, tmp_path: Path
+    ) -> None:
+        """fetch_all() with executor=None should execute sequentially, not create ThreadPoolExecutor."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.ports import ProgressCallback
+        from datacachalog.core.services import Catalog
+
+        # Setup multiple files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "a.csv").write_text("a")
+        (storage_dir / "b.csv").write_text("b")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        datasets = [
+            Dataset(name="alpha", source=str(storage_dir / "a.csv")),
+            Dataset(name="beta", source=str(storage_dir / "b.csv")),
+        ]
+        catalog = Catalog(
+            datasets=datasets,
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+            executor=None,  # Explicitly no executor
+        )
+
+        # Track execution order to verify sequential execution
+        execution_order: list[str] = []
+
+        class OrderTrackingReporter:
+            def start_task(self, name: str, total: int) -> ProgressCallback:
+                execution_order.append(name)
+                return lambda d, t: None
+
+            def finish_task(self, name: str) -> None:
+                pass
+
+        tracker = OrderTrackingReporter()
+        result = catalog.fetch_all(progress=tracker, max_workers=None)
+
+        # Verify results are correct
+        assert len(result) == 2
+        assert "alpha" in result
+        assert "beta" in result
+        # Verify sequential execution (no parallel ThreadPoolExecutor created)
+        # When executor=None, should use SynchronousExecutor which executes sequentially
+        assert len(execution_order) == 2
+        assert execution_order == ["alpha", "beta"] or execution_order == [
+            "beta",
+            "alpha",
+        ]
+
+    @pytest.mark.tra("Domain.Catalog")
+    @pytest.mark.tier(1)
+    def test_fetch_all_without_executor_preserves_functionality(
+        self, tmp_path: Path
+    ) -> None:
+        """fetch_all() should still return correct results when no executor provided."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        # Setup
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "a.csv").write_text("a content")
+        (storage_dir / "b.csv").write_text("b content")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        datasets = [
+            Dataset(name="alpha", source=str(storage_dir / "a.csv")),
+            Dataset(name="beta", source=str(storage_dir / "b.csv")),
+        ]
+        catalog = Catalog(
+            datasets=datasets,
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+            executor=None,  # Explicitly no executor
+        )
+
+        # Act
+        result = catalog.fetch_all()
+
+        # Assert - should work correctly even without executor
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"alpha", "beta"}
+        alpha_path = result["alpha"]
+        assert isinstance(alpha_path, Path)
+        assert alpha_path.read_text() == "a content"
+        beta_path = result["beta"]
+        assert isinstance(beta_path, Path)
+        assert beta_path.read_text() == "b content"
+
 
 @pytest.mark.core
 class TestFetchAllParallel:
@@ -2077,3 +2181,72 @@ class TestFetchAsOf:
 
             assert exc_info.value.name == "data"
             assert exc_info.value.recovery_hint is not None
+
+
+@pytest.mark.core
+@pytest.mark.tra("Domain.Catalog")
+@pytest.mark.tier(1)
+class TestConcurrencyBoundary:
+    """Tests to verify concurrency boundary compliance in core domain."""
+
+    def test_core_services_no_concurrency_imports(self) -> None:
+        """core/services.py should not import ThreadPoolExecutorAdapter or other concurrency primitives."""
+        import ast
+        from pathlib import Path
+
+        # Read the source file
+        core_services_path = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "datacachalog"
+            / "core"
+            / "services.py"
+        )
+        source_code = core_services_path.read_text()
+
+        # Parse AST to check imports
+        tree = ast.parse(source_code, filename=str(core_services_path))
+
+        # Check for forbidden imports
+        forbidden_imports = [
+            "ThreadPoolExecutorAdapter",
+            "ThreadPoolExecutor",
+            "ProcessPoolExecutor",
+            "threading.Lock",
+            "asyncio.Lock",
+        ]
+
+        violations: list[str] = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if any(forbidden in alias.name for forbidden in forbidden_imports):
+                        violations.append(f"Import: {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and any(
+                    forbidden in node.module for forbidden in forbidden_imports
+                ):
+                    violations.append(f"ImportFrom: {node.module}")
+                for alias in node.names:
+                    if any(forbidden in alias.name for forbidden in forbidden_imports):
+                        violations.append(f"ImportFrom: {node.module}.{alias.name}")
+
+        # Also check source code directly for string patterns (AST might miss some)
+        if "ThreadPoolExecutorAdapter" in source_code:
+            # Check if it's in a comment or string literal vs actual import
+            lines = source_code.split("\n")
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                # Skip comments and docstrings, check if it's an import statement
+                if (
+                    "ThreadPoolExecutorAdapter" in stripped
+                    and not stripped.startswith("#")
+                    and not stripped.startswith('"""')
+                    and "import" in stripped
+                ):
+                    violations.append(f"Line {i}: {stripped}")
+
+        assert len(violations) == 0, (
+            f"Concurrency boundary violations found in core/services.py: {violations}"
+        )

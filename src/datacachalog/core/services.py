@@ -526,12 +526,14 @@ class Catalog:
     ) -> dict[str, Path | list[Path]]:
         """Fetch all datasets, downloading any that are stale.
 
-        Downloads are performed in parallel when max_workers > 1.
+        Downloads are performed in parallel when an executor is injected and
+        max_workers > 1. When no executor is provided, execution is sequential.
 
         Args:
             progress: Optional progress reporter for download feedback.
-            max_workers: Maximum parallel downloads. None uses ThreadPoolExecutor
-                default. Use 1 for sequential downloads.
+            max_workers: Maximum parallel downloads when executor is provided.
+                Use 1 for sequential downloads. When executor is None, execution
+                is always sequential regardless of max_workers.
 
         Returns:
             Dict mapping dataset names to their local cached paths.
@@ -546,25 +548,18 @@ class Catalog:
 
         results: dict[str, Path | list[Path]] = {}
 
-        # Sequential execution for max_workers=1
-        if max_workers == 1:
+        # Sequential execution for max_workers=1 or when no executor provided
+        if max_workers == 1 or self._executor is None:
             for dataset in datasets:
                 results[dataset.name] = self.fetch(dataset.name, progress=progress)
             return results
 
-        # Parallel execution - use injected executor or create one
+        # Parallel execution - use injected executor
         def fetch_one(dataset: Dataset) -> tuple[str, Path | list[Path]]:
             result = self.fetch(dataset.name, progress=progress)
             return dataset.name, result
 
-        # Use injected executor if available, otherwise create ThreadPoolExecutorAdapter
-        if self._executor is not None:
-            executor = self._executor
-        else:
-            from datacachalog.adapters.executor import ThreadPoolExecutorAdapter
-
-            executor = ThreadPoolExecutorAdapter(max_workers=max_workers)
-
+        executor = self._executor
         with executor:
             futures = [executor.submit(fetch_one, ds) for ds in datasets]
             for future in futures:
