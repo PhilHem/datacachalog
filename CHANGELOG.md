@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-12-24
+
+### Added
+
+- **CLI Enhancements**
+  - `catalog list --status` - Display cache state (cached/stale/missing) alongside dataset list
+  - `catalog cache-stats` - Show cache statistics including total size and file counts
+  - Rich table formatting for `status` command with color-coded status indicators
+  - Status color mapping: green for cached, yellow for stale, red for missing
+- **S3 Version Tracking** - Access historical versions of objects in versioned S3 buckets with date-based selection
+- **CLI Architecture** - Refactored CLI into modular structure with separate command modules
+
+### Changed
+
+- CLI module structure split into separate modules for better maintainability
+- Test architecture improvements with TRA (Test Responsibility Anchor) and tier markers
+
 ## [0.6.0] - 2025-12-15
 
 ### Added
@@ -78,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core models: `Dataset`, `CacheMetadata`, `FileMetadata`
 - Port definitions: `StoragePort`, `CachePort`
 
+[0.7.0]: https://github.com/PhilHem/datacachalog/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PhilHem/datacachalog/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PhilHem/datacachalog/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PhilHem/datacachalog/compare/v0.3.0...v0.4.0
