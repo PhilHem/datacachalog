@@ -2684,3 +2684,235 @@ class TestConcurrencyBoundary:
         assert len(violations) == 0, (
             f"Concurrency boundary violations found in core/services.py: {violations}"
         )
+
+
+@pytest.mark.core
+@pytest.mark.tra("UseCase.CleanOrphaned")
+@pytest.mark.tier(1)
+class TestCleanOrphaned:
+    """Tests for clean_orphaned() method."""
+
+    def test_clean_orphaned_returns_zero_when_cache_empty(self, tmp_path: Path) -> None:
+        """clean_orphaned() should return 0 when cache is empty."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(name="customers", source=str(tmp_path / "data.csv"))
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        count = catalog.clean_orphaned()
+        assert count == 0
+
+    def test_clean_orphaned_returns_zero_when_no_orphaned_keys(
+        self, tmp_path: Path
+    ) -> None:
+        """clean_orphaned() should return 0 when all cache keys are valid."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache with valid key
+        catalog.fetch("customers")
+
+        count = catalog.clean_orphaned()
+        assert count == 0
+
+    def test_clean_orphaned_removes_orphaned_keys(self, tmp_path: Path) -> None:
+        """clean_orphaned() should remove orphaned keys and return count."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Fetch to populate cache with valid key
+        catalog.fetch("customers")
+
+        # Manually add orphaned cache entry
+        orphaned_file = cache_dir / "orphaned.csv"
+        orphaned_file.write_text("orphaned data")
+        orphaned_meta = cache_dir / "orphaned.csv.meta.json"
+        orphaned_meta.write_text(
+            '{"etag": "orphaned", "cached_at": "2024-01-01T00:00:00", "source": ""}'
+        )
+
+        count = catalog.clean_orphaned()
+        assert count == 1
+        assert cache.get("orphaned") is None
+
+    def test_clean_orphaned_preserves_glob_dataset_keys(self, tmp_path: Path) -> None:
+        """clean_orphaned() should preserve hierarchical keys for glob datasets."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "2024-01.parquet").write_text("jan")
+        (storage_dir / "2024-02.parquet").write_text("feb")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="monthly_data",
+            source=str(storage_dir / "*.parquet"),
+        )
+        catalog = Catalog(
+            datasets=[dataset],
+            storage=storage,
+            cache=cache,
+            cache_dir=cache_dir,
+        )
+
+        # Fetch to populate cache with glob keys
+        catalog.fetch("monthly_data")
+
+        # Add orphaned key
+        orphaned_file = cache_dir / "orphaned.txt"
+        orphaned_file.write_text("orphaned")
+        orphaned_meta = cache_dir / "orphaned.txt.meta.json"
+        orphaned_meta.write_text(
+            '{"etag": "orphaned", "cached_at": "2024-01-01T00:00:00", "source": ""}'
+        )
+
+        count = catalog.clean_orphaned()
+        assert count == 1
+        # Verify glob keys are preserved
+        assert cache.get("monthly_data/2024-01.parquet") is not None
+        assert cache.get("monthly_data/2024-02.parquet") is not None
+
+    def test_clean_orphaned_preserves_versioned_keys(self, tmp_path: Path) -> None:
+        """clean_orphaned() should preserve date-based versioned keys."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file = storage_dir / "data.csv"
+        remote_file.write_text("id,name\n1,Alice\n")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset = Dataset(
+            name="customers",
+            source=str(remote_file),
+            cache_path=cache_dir / "customers.csv",
+        )
+        catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
+
+        # Manually create a versioned cache key (date-based format)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        versioned_key = "2024-01-15T120000.csv"
+        versioned_file = cache_dir / versioned_key
+        versioned_file.write_text("versioned data")
+        versioned_meta = cache_dir / f"{versioned_key}.meta.json"
+        versioned_meta.write_text(
+            '{"etag": "v1", "cached_at": "2024-01-15T12:00:00", "source": "s3://bucket/data.csv"}'
+        )
+
+        # Add orphaned key
+        orphaned_file = cache_dir / "orphaned.txt"
+        orphaned_file.write_text("orphaned")
+        orphaned_meta = cache_dir / "orphaned.txt.meta.json"
+        orphaned_meta.write_text(
+            '{"etag": "orphaned", "cached_at": "2024-01-01T00:00:00", "source": ""}'
+        )
+
+        count = catalog.clean_orphaned()
+        assert count == 1
+        # Verify versioned key is preserved
+        assert cache.get(versioned_key) is not None
+
+    def test_clean_orphaned_handles_mixed_valid_and_orphaned(
+        self, tmp_path: Path
+    ) -> None:
+        """clean_orphaned() should correctly identify and remove only orphaned keys."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.adapters.storage import FilesystemStorage
+        from datacachalog.core.services import Catalog
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        remote_file1 = storage_dir / "data1.csv"
+        remote_file1.write_text("data1")
+        remote_file2 = storage_dir / "data2.csv"
+        remote_file2.write_text("data2")
+
+        cache_dir = tmp_path / "cache"
+        storage = FilesystemStorage()
+        cache = FileCache(cache_dir=cache_dir)
+
+        dataset1 = Dataset(
+            name="customers",
+            source=str(remote_file1),
+            cache_path=cache_dir / "customers.csv",
+        )
+        dataset2 = Dataset(
+            name="products",
+            source=str(remote_file2),
+            cache_path=cache_dir / "products.csv",
+        )
+        catalog = Catalog(datasets=[dataset1, dataset2], storage=storage, cache=cache)
+
+        # Fetch to populate cache with valid keys
+        catalog.fetch("customers")
+        catalog.fetch("products")
+
+        # Add multiple orphaned keys
+        for i in range(3):
+            orphaned_file = cache_dir / f"orphaned{i}.txt"
+            orphaned_file.write_text(f"orphaned{i}")
+            orphaned_meta = cache_dir / f"orphaned{i}.txt.meta.json"
+            orphaned_meta.write_text(
+                f'{{"etag": "orphaned{i}", "cached_at": "2024-01-01T00:00:00", "source": ""}}'
+            )
+
+        count = catalog.clean_orphaned()
+        assert count == 3
+        # Verify valid keys are preserved
+        assert cache.get("customers") is not None
+        assert cache.get("products") is not None
+        # Verify orphaned keys are removed
+        assert cache.get("orphaned0") is None
+        assert cache.get("orphaned1") is None
+        assert cache.get("orphaned2") is None

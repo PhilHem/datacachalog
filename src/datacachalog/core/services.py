@@ -1,5 +1,6 @@
 """Core domain services for datacachalog."""
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -642,3 +643,56 @@ class Catalog:
                 results[name] = result
 
         return results
+
+    def clean_orphaned(self) -> int:
+        """Remove orphaned cache entries not belonging to any dataset.
+
+        Compares all cache keys against known dataset cache keys and removes
+        orphaned entries. Valid keys include:
+        - Regular dataset keys (dataset name)
+        - Glob dataset keys (starting with "{dataset_name}/")
+        - Versioned keys (date-based format: YYYY-MM-DDTHHMMSS.ext)
+
+        Returns:
+            Number of orphaned cache entries removed.
+        """
+        all_keys = self._cache.list_all_keys()
+        if not all_keys:
+            return 0
+
+        # Pattern for date-based versioned keys: YYYY-MM-DDTHHMMSS.ext
+        versioned_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}\.[^.]+$")
+
+        # Build set of valid dataset names and glob prefixes
+        valid_dataset_names: set[str] = set()
+        glob_prefixes: set[str] = set()
+
+        for dataset in self._datasets.values():
+            if is_glob_pattern(dataset.source):
+                glob_prefixes.add(f"{dataset.name}/")
+            else:
+                valid_dataset_names.add(dataset.name)
+
+        # Find orphaned keys
+        orphaned: list[str] = []
+        for key in all_keys:
+            # Check for exact match (regular dataset)
+            if key in valid_dataset_names:
+                continue
+
+            # Check for glob dataset prefix match
+            if any(key.startswith(prefix) for prefix in glob_prefixes):
+                continue
+
+            # Check for versioned key pattern
+            if versioned_pattern.match(key):
+                continue
+
+            # Key is orphaned
+            orphaned.append(key)
+
+        # Remove orphaned keys
+        for key in orphaned:
+            self._cache.invalidate(key)
+
+        return len(orphaned)

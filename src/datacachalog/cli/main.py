@@ -487,6 +487,41 @@ def invalidate_glob(
 
 
 @app.command()
+def clean() -> None:
+    """Remove orphaned cache files not belonging to any dataset."""
+    from datacachalog import Catalog
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    count = cat.clean_orphaned()
+    typer.echo(f"Cleaned {count} orphaned cache file(s).")
+
+
+@app.command()
 def versions(
     name: str = typer.Argument(help="Name of the dataset to list versions for."),
     limit: int = typer.Option(
