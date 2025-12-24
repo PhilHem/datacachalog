@@ -311,23 +311,16 @@ def list_datasets(
     ),
 ) -> None:
     """List all datasets in the catalog."""
-    from datacachalog.discovery import load_catalog
+    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
 
-    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
-
-    # Load and display datasets
-    all_datasets: list[tuple[str, str, str]] = []  # (catalog, name, source)
-
-    for catalog_name, catalog_path in sorted(catalogs.items()):
-        try:
-            datasets, _ = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        for ds in datasets:
-            all_datasets.append((catalog_name, ds.name, ds.source))
+    # Load datasets using helper
+    try:
+        all_datasets = _load_catalog_datasets(catalog_name=catalog)
+    except CatalogLoadError as e:
+        typer.echo(f"Error: {e}", err=True)
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}", err=True)
+        raise typer.Exit(1) from None
 
     if not all_datasets:
         typer.echo("No datasets found. Run 'catalog init' to get started.")
@@ -343,17 +336,10 @@ def list_datasets(
         table.add_column("Source")
 
     # Add rows for each dataset
-    for catalog_name, name, source in all_datasets:
-        # Format name with catalog prefix if needed
-        if len(catalogs) == 1 and catalog:
-            # Single catalog mode - don't show prefix
-            display_name = name
-        else:
-            display_name = f"{catalog_name}/{name}"
-
+    for display_name, ds_name, source in all_datasets:
         # Check cache state if --status flag is set
         if status:
-            state = _get_cache_state(cat, name)
+            state = _get_cache_state(cat, ds_name)
             colored_status = _format_status_with_color(state)
             table.add_row(display_name, source, colored_status)
         else:
@@ -375,23 +361,16 @@ def status(
     ),
 ) -> None:
     """Show cache state (cached/stale/missing) per dataset."""
-    from datacachalog.discovery import load_catalog
+    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
 
-    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
-
-    # Load datasets per catalog to track catalog names
-    catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
-
-    for catalog_name, catalog_path in sorted(catalogs.items()):
-        try:
-            datasets, _ = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        for ds in datasets:
-            catalog_datasets.append((catalog_name, ds.name, ds.source))
+    # Load datasets using helper
+    try:
+        catalog_datasets = _load_catalog_datasets(catalog_name=catalog)
+    except CatalogLoadError as e:
+        typer.echo(f"Error: {e}", err=True)
+        if e.recovery_hint:
+            typer.echo(f"Hint: {e.recovery_hint}", err=True)
+        raise typer.Exit(1) from None
 
     if not catalog_datasets:
         typer.echo("No datasets found. Run 'catalog init' to get started.")
@@ -403,15 +382,8 @@ def status(
     table.add_column("Status")
 
     # Add rows for each dataset
-    for catalog_name, ds_name, _source in catalog_datasets:
+    for display_name, ds_name, _source in catalog_datasets:
         state = _get_cache_state(cat, ds_name)
-
-        # Format name with catalog prefix if needed
-        if len(catalogs) == 1 and catalog:
-            # Single catalog mode - don't show prefix
-            display_name = ds_name
-        else:
-            display_name = f"{catalog_name}/{ds_name}"
 
         # Apply color coding to status
         colored_status = _format_status_with_color(state)
@@ -755,6 +727,63 @@ def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
         return "fresh"
 
 
+def _load_catalog_datasets(
+    catalog_name: str | None = None,
+) -> list[tuple[str, str, str]]:
+    """Load datasets from catalogs and return formatted list.
+
+    Args:
+        catalog_name: Optional catalog name to filter by.
+
+    Returns:
+        List of tuples (display_name, ds_name, source) for each dataset.
+
+    Raises:
+        CatalogLoadError: If catalog file cannot be loaded.
+    """
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        return []
+
+    # Filter to specific catalog if requested
+    if catalog_name:
+        if catalog_name not in catalogs:
+            return []
+        catalogs = {catalog_name: catalogs[catalog_name]}
+
+    # Load datasets per catalog to track catalog names
+    catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
+
+    for catalog_name_item, catalog_path in sorted(catalogs.items()):
+        datasets, _ = load_catalog(catalog_path)
+        # CatalogLoadError will propagate up if load_catalog fails
+        for ds in datasets:
+            catalog_datasets.append((catalog_name_item, ds.name, ds.source))
+
+    # Format display names based on catalog context
+    result: list[tuple[str, str, str]] = []
+    for catalog_name_item, ds_name, source in catalog_datasets:
+        # Format name with catalog prefix if needed
+        # When there's only one catalog and a filter was specified, don't show prefix
+        if len(catalogs) == 1 and catalog_name:
+            # Single catalog mode with filter - don't show prefix
+            display_name = ds_name
+        elif len(catalogs) == 1:
+            # Single catalog without filter - also don't show prefix (simpler UX)
+            display_name = ds_name
+        else:
+            # Multiple catalogs - show prefix
+            display_name = f"{catalog_name_item}/{ds_name}"
+        result.append((display_name, ds_name, source))
+
+    return result
+
+
 def _format_status_with_color(status: str) -> Text:
     """Format status string with color coding.
 
@@ -767,14 +796,10 @@ def _format_status_with_color(status: str) -> Text:
         - "stale" -> yellow
         - "missing" -> red
     """
-    if status == "fresh":
-        return Text(status, style="green")
-    elif status == "stale":
-        return Text(status, style="yellow")
-    elif status == "missing":
-        return Text(status, style="red")
-    else:
-        return Text(status)
+    from datacachalog.core.formatting import status_to_color
+
+    color = status_to_color(status)
+    return Text(status, style=color) if color else Text(status)
 
 
 def _format_size(size_bytes: int) -> str:

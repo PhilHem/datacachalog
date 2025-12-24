@@ -8,7 +8,7 @@ from rich.text import Text
 from typer.testing import CliRunner
 
 from datacachalog.cli import app
-from datacachalog.cli.main import _format_status_with_color
+from datacachalog.cli.main import _format_status_with_color, _load_catalog_datasets
 
 
 runner = CliRunner()
@@ -3936,3 +3936,122 @@ class TestFormatStatusWithColor:
         assert isinstance(result, Text)
         assert result.plain == "missing"
         assert result.style == "red"
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.List")
+@pytest.mark.tier(1)
+class TestLoadCatalogDatasets:
+    """Tests for _load_catalog_datasets helper function."""
+
+    def test_load_catalog_datasets_loads_single_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that helper loads datasets from a single catalog."""
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+                Dataset(name="orders", source="s3://bucket/orders.parquet"),
+            ]
+        """)
+        )
+
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = _load_catalog_datasets(catalog_name=None)
+
+        assert len(result) == 2
+        assert ("customers", "customers", "s3://bucket/customers.parquet") in result
+        assert ("orders", "orders", "s3://bucket/orders.parquet") in result
+
+    def test_load_catalog_datasets_loads_multiple_catalogs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that helper loads datasets from multiple catalogs with prefixes."""
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="s3://bucket/metrics.parquet"),
+            ]
+        """)
+        )
+
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = _load_catalog_datasets(catalog_name=None)
+
+        assert len(result) == 2
+        # Check that catalog prefixes are included in display_name
+        display_names = [r[0] for r in result]
+        assert "core/customers" in display_names
+        assert "analytics/metrics" in display_names
+
+    def test_load_catalog_datasets_handles_catalog_load_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that helper raises CatalogLoadError for malformed catalog."""
+        from datacachalog.core.exceptions import CatalogLoadError
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        # Create catalog with syntax error
+        (catalogs_dir / "bad.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            # Missing closing bracket
+        """)
+        )
+
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(CatalogLoadError):
+            _load_catalog_datasets(catalog_name=None)
+
+    def test_load_catalog_datasets_empty_catalogs_returns_empty_list(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that helper returns empty list when no catalogs found."""
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        # Create empty catalog
+        (catalogs_dir / "empty.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = _load_catalog_datasets(catalog_name=None)
+
+        assert result == []
