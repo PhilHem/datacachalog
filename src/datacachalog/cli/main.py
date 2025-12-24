@@ -354,7 +354,8 @@ def list_datasets(
         # Check cache state if --status flag is set
         if status:
             state = _get_cache_state(cat, name)
-            table.add_row(display_name, source, state)
+            colored_status = _format_status_with_color(state)
+            table.add_row(display_name, source, colored_status)
         else:
             table.add_row(display_name, source)
 
