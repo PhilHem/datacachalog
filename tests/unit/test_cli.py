@@ -2712,3 +2712,310 @@ class TestCatalogInfo:
                 if "size" in result.output.lower()
             )
         )
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.CatalogLoading")
+@pytest.mark.tier(1)
+class TestLoadCatalogContext:
+    """Tests for load_catalog_context helper function."""
+
+    def test_load_catalog_context_without_filter_returns_all_catalogs(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() returns all catalogs when no filter specified."""
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure with multiple catalogs
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        # Create two catalog files
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            ]
+            """
+            )
+        )
+        (catalogs_dir / "core.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="orders", source="s3://bucket/orders.parquet"),
+            ]
+            """
+            )
+        )
+
+        # Change to tmp_path to simulate running from project root
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            catalog, root, catalogs = load_catalog_context()
+
+            assert catalog is not None
+            assert root == tmp_path
+            assert len(catalogs) == 2
+            assert "default" in catalogs
+            assert "core" in catalogs
+            # Should have datasets from both catalogs
+            assert len(catalog.datasets) == 2
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_with_filter_returns_single_catalog(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() filters to single catalog when name specified."""
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure with multiple catalogs
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            ]
+            """
+            )
+        )
+        (catalogs_dir / "core.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="orders", source="s3://bucket/orders.parquet"),
+            ]
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            catalog, root, catalogs = load_catalog_context(catalog_name="default")
+
+            assert catalog is not None
+            assert root == tmp_path
+            assert len(catalogs) == 1
+            assert "default" in catalogs
+            # Should only have datasets from default catalog
+            assert len(catalog.datasets) == 1
+            assert catalog.datasets[0].name == "customers"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_raises_when_catalog_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() raises typer.Exit when catalog name doesn't exist."""
+        import typer
+
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure with one catalog
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = []
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            with pytest.raises(typer.Exit) as exc_info:
+                load_catalog_context(catalog_name="nonexistent")
+            assert exc_info.value.exit_code == 1
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_handles_load_errors(self, tmp_path: Path) -> None:
+        """load_catalog_context() handles CatalogLoadError properly."""
+        import typer
+
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure with invalid catalog
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        # Create catalog with syntax error
+        (catalogs_dir / "broken.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="test", source="s3://bucket/test.parquet"
+                # Missing closing parenthesis
+            ]
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            with pytest.raises(typer.Exit) as exc_info:
+                load_catalog_context(catalog_name="broken")
+            assert exc_info.value.exit_code == 1
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_returns_catalog_instance(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() returns functional Catalog instance."""
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("test content")
+
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="test", source="{source_file}"),
+            ]
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            catalog, _root, _catalogs = load_catalog_context()
+
+            assert catalog is not None
+            # Should be able to use the catalog
+            assert len(catalog.datasets) == 1
+            assert catalog.datasets[0].name == "test"
+            # Should be able to fetch
+            result = catalog.fetch("test")
+            assert result is not None
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_uses_cache_dir_from_catalog(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() respects cache_dir from catalog file."""
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = []
+            cache_dir = "custom_cache"
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            catalog, _root, _catalogs = load_catalog_context()
+
+            assert catalog is not None
+            # Should use custom cache_dir
+            assert catalog._cache_dir == tmp_path / "custom_cache"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_defaults_cache_dir_when_not_specified(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog_context() defaults to 'data' when cache_dir not in catalog."""
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent(
+                """\
+            from datacachalog import Dataset
+            datasets = []
+            """
+            )
+        )
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            catalog, _root, _catalogs = load_catalog_context()
+
+            assert catalog is not None
+            # Should default to "data"
+            assert catalog._cache_dir == tmp_path / "data"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_catalog_context_handles_empty_catalogs(self, tmp_path: Path) -> None:
+        """load_catalog_context() handles case when no catalogs exist."""
+        import typer
+
+        from datacachalog.cli.main import load_catalog_context
+
+        # Setup: create project structure but no catalogs
+        (tmp_path / ".git").mkdir()
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        import os
+
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            # Should raise typer.Exit when no catalogs found
+            with pytest.raises(typer.Exit) as exc_info:
+                load_catalog_context()
+            assert exc_info.value.exit_code == 1
+        finally:
+            os.chdir(original_cwd)

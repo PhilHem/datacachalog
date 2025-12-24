@@ -67,6 +67,60 @@ datasets = [
 '''
 
 
+def load_catalog_context(
+    catalog_name: str | None = None,
+) -> tuple[Catalog, Path, dict[str, Path]]:
+    """Load catalog context for CLI commands.
+
+    Args:
+        catalog_name: Optional catalog name to filter by.
+
+    Returns:
+        Tuple of (Catalog instance, project root Path, catalogs dict).
+
+    Raises:
+        typer.Exit: If catalog not found or load errors occur.
+    """
+    from datacachalog import Catalog
+    from datacachalog.config import find_project_root
+    from datacachalog.discovery import discover_catalogs, load_catalog
+
+    root = find_project_root()
+    catalogs = discover_catalogs(root)
+
+    if not catalogs:
+        typer.echo("No catalogs found. Run 'catalog init' to get started.")
+        raise typer.Exit(1)
+
+    # Filter to specific catalog if requested
+    if catalog_name:
+        if catalog_name not in catalogs:
+            typer.echo(f"Catalog '{catalog_name}' not found.")
+            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
+            raise typer.Exit(1)
+        catalogs = {catalog_name: catalogs[catalog_name]}
+
+    # Load all datasets
+    all_ds = []
+    cache_dir = "data"
+    for _catalog_name, catalog_path in catalogs.items():
+        try:
+            datasets, cat_cache_dir = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        all_ds.extend(datasets)
+        if cat_cache_dir:
+            cache_dir = cat_cache_dir
+
+    # Create catalog
+    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+
+    return cat, root, catalogs
+
+
 @app.command()
 def init(
     directory: str | None = typer.Argument(
