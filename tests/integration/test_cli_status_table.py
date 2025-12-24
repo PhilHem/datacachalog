@@ -87,3 +87,121 @@ class TestStatusTableIntegration:
         assert "fresh" in result.output
         assert "stale" in result.output
         assert "missing" in result.output
+
+    def test_status_table_integration_multiple_catalogs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify status table formatting with multiple catalogs shows catalog prefixes correctly."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        source_file1 = storage_dir / "data1.csv"
+        source_file1.write_text("id,name\n1,Alice\n")
+        source_file2 = storage_dir / "data2.csv"
+        source_file2.write_text("id,name\n1,Bob\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file1}"),
+            ]
+        """)
+        )
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{source_file2}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both datasets to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "metrics"])
+
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        # Verify table format
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        assert "Name" in result.output or "name" in result.output.lower()
+        assert "Status" in result.output or "status" in result.output.lower()
+        # Verify catalog prefixes appear in Name column
+        assert "core/customers" in result.output
+        assert "analytics/metrics" in result.output
+        # Verify status column shows correct status values
+        assert "fresh" in result.output
+        # Both datasets should appear in output
+        assert "customers" in result.output
+        assert "metrics" in result.output
+
+    def test_status_table_integration_catalog_filter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify --catalog flag filters datasets correctly when using table format."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+
+        source_file1 = storage_dir / "data1.csv"
+        source_file1.write_text("id,name\n1,Alice\n")
+        source_file2 = storage_dir / "data2.csv"
+        source_file2.write_text("id,name\n1,Bob\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file1}"),
+            ]
+        """)
+        )
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{source_file2}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both datasets to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "metrics"])
+
+        # Test with --catalog core
+        result = runner.invoke(app, ["status", "--catalog", "core"])
+
+        assert result.exit_code == 0
+        # Verify table format
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        assert "Status" in result.output or "status" in result.output.lower()
+        # Only datasets from core catalog should appear
+        assert "customers" in result.output
+        assert "fresh" in result.output  # Status column shows "fresh"
+        # Should NOT show metrics from analytics catalog
+        assert "metrics" not in result.output
+
+        # Test with --catalog analytics
+        result2 = runner.invoke(app, ["status", "--catalog", "analytics"])
+
+        assert result2.exit_code == 0
+        # Verify table format
+        assert "│" in result2.output or "┃" in result2.output  # Table borders
+        assert "Status" in result2.output or "status" in result2.output.lower()
+        # Only datasets from analytics catalog should appear
+        assert "metrics" in result2.output
+        assert "fresh" in result2.output  # Status column shows "fresh"
+        # Should NOT show customers from core catalog
+        assert "customers" not in result2.output
