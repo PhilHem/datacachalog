@@ -38,6 +38,32 @@ catalog = Catalog(
 path = catalog.fetch("customers")
 ```
 
+## CLI Usage
+
+The `catalog` CLI provides commands for managing your data catalog:
+
+```bash
+# List all datasets
+catalog list
+
+# List datasets with cache status (fresh/stale/missing)
+catalog list --status
+
+# List datasets from a specific catalog
+catalog list --catalog core --status
+
+# Fetch a dataset
+catalog fetch customers
+
+# Show cache status for all datasets
+catalog status
+```
+
+The `--status` flag shows the cache state for each dataset:
+- `[fresh]` - Dataset is cached and up-to-date
+- `[stale]` - Dataset is cached but remote source has changed
+- `[missing]` - Dataset is not cached
+
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
