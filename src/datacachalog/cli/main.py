@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from datacachalog.core.exceptions import CatalogLoadError
 
@@ -395,15 +396,29 @@ def status(
         typer.echo("No datasets found. Run 'catalog init' to get started.")
         return
 
-    # Check status for each dataset
+    # Build Rich table
+    table = Table()
+    table.add_column("Name")
+    table.add_column("Status")
+
+    # Add rows for each dataset
     for catalog_name, ds_name, _source in catalog_datasets:
         state = _get_cache_state(cat, ds_name)
 
-        # Format output
+        # Format name with catalog prefix if needed
         if len(catalogs) == 1 and catalog:
-            typer.echo(f"{ds_name}: {state}")
+            # Single catalog mode - don't show prefix
+            display_name = ds_name
         else:
-            typer.echo(f"{catalog_name}/{ds_name}: {state}")
+            display_name = f"{catalog_name}/{ds_name}"
+
+        # Apply color coding to status
+        colored_status = _format_status_with_color(state)
+        table.add_row(display_name, colored_status)
+
+    # Print table using Rich Console
+    console = Console(force_terminal=True)
+    console.print(table)
 
 
 @app.command()
@@ -737,6 +752,28 @@ def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
         return "stale"
     else:
         return "fresh"
+
+
+def _format_status_with_color(status: str) -> Text:
+    """Format status string with color coding.
+
+    Args:
+        status: Status string ("fresh", "stale", or "missing")
+
+    Returns:
+        Rich Text object with appropriate color:
+        - "fresh" -> green
+        - "stale" -> yellow
+        - "missing" -> red
+    """
+    if status == "fresh":
+        return Text(status, style="green")
+    elif status == "stale":
+        return Text(status, style="yellow")
+    elif status == "missing":
+        return Text(status, style="red")
+    else:
+        return Text(status)
 
 
 def _format_size(size_bytes: int) -> str:
