@@ -4,9 +4,11 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from datacachalog.cli import app
+from datacachalog.cli.main import _format_status_with_color
 
 
 runner = CliRunner()
@@ -3898,3 +3900,31 @@ class TestCacheStats:
             "Total cache size:" in result.output
             or "No datasets" in result.output.lower()
         )
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.FormatStatus")
+@pytest.mark.tier(1)
+class TestFormatStatusWithColor:
+    """Tests for _format_status_with_color helper function."""
+
+    def test_format_status_with_color_fresh(self) -> None:
+        """Verify fresh returns green text."""
+        result = _format_status_with_color("fresh")
+        assert isinstance(result, Text)
+        assert result.plain == "fresh"
+        assert result.style == "green"
+
+    def test_format_status_with_color_stale(self) -> None:
+        """Verify stale returns yellow text."""
+        result = _format_status_with_color("stale")
+        assert isinstance(result, Text)
+        assert result.plain == "stale"
+        assert result.style == "yellow"
+
+    def test_format_status_with_color_missing(self) -> None:
+        """Verify missing returns red text."""
+        result = _format_status_with_color("missing")
+        assert isinstance(result, Text)
+        assert result.plain == "missing"
+        assert result.style == "red"
