@@ -193,10 +193,43 @@ class TestCatalogList:
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
     @pytest.mark.tier(1)
+    def test_list_shows_table_format(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list outputs Rich table format (not plain text)."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+                Dataset(name="orders", source="s3://bucket/orders.parquet"),
+            ]
+        """)
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # Rich table should have box-drawing characters
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        # Should have column headers
+        assert "Name" in result.output or "name" in result.output.lower()
+        assert "Source" in result.output or "source" in result.output.lower()
+        # Should not have plain text format
+        assert "customers: s3://bucket/customers.parquet" not in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
     def test_list_without_status_flag_unchanged(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """list without --status flag shows original format."""
+        """list without --status flag shows table format without Status column."""
         catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
         catalogs_dir.mkdir(parents=True)
 
@@ -214,8 +247,12 @@ class TestCatalogList:
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
-        assert "customers: s3://bucket/customers.parquet" in result.output
-        assert "[" not in result.output  # No status brackets
+        # Should have table format
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        assert "customers" in result.output
+        assert "s3://bucket/customers.parquet" in result.output
+        # Should not have Status column
+        assert "Status" not in result.output
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -250,7 +287,7 @@ class TestCatalogList:
 
         assert result.exit_code == 0
         assert "customers" in result.output
-        assert "[fresh]" in result.output
+        assert "fresh" in result.output  # Status column shows "fresh" (not "[fresh]")
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -291,7 +328,7 @@ class TestCatalogList:
 
         assert result.exit_code == 0
         assert "customers" in result.output
-        assert "[stale]" in result.output
+        assert "stale" in result.output  # Status column shows "stale" (not "[stale]")
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -325,7 +362,9 @@ class TestCatalogList:
 
         assert result.exit_code == 0
         assert "customers" in result.output
-        assert "[missing]" in result.output
+        assert (
+            "missing" in result.output
+        )  # Status column shows "missing" (not "[missing]")
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -371,7 +410,7 @@ class TestCatalogList:
 
         assert result.exit_code == 0
         assert "customers" in result.output
-        assert "[fresh]" in result.output
+        assert "fresh" in result.output  # Status column shows "fresh" (not "[fresh]")
         assert "metrics" not in result.output
 
     @pytest.mark.cli
@@ -419,7 +458,7 @@ class TestCatalogList:
         assert result.exit_code == 0
         assert "core/customers" in result.output
         assert "analytics/metrics" in result.output
-        assert "[fresh]" in result.output
+        assert "fresh" in result.output  # Status column shows "fresh" (not "[fresh]")
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -464,6 +503,116 @@ class TestCatalogList:
         assert result.exit_code == 0
         assert "--status" in result.output
         assert "Show cache state (fresh/stale/missing)" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_shows_table_with_status_column(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify table includes Status column when --status flag is set."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        # Verify table format
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        # Verify Status column header is present
+        assert "Status" in result.output
+        # Verify status value is in the output
+        assert "fresh" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_table_shows_catalog_prefixes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify catalog prefixes appear in table Name column."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="s3://bucket/metrics.parquet"),
+            ]
+        """)
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # Verify table format
+        assert "│" in result.output or "┃" in result.output  # Table borders
+        # Verify catalog prefixes are shown in Name column
+        assert "core/customers" in result.output
+        assert "analytics/metrics" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_table_empty_catalog_shows_hint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify empty catalog shows hint message, not table."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        # Create an empty catalog (catalog exists but has no datasets)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # Verify hint message is present
+        assert "No datasets found" in result.output
+        assert "init" in result.output.lower()
+        # Verify no table is shown (no table borders)
+        assert "│" not in result.output
+        assert "┃" not in result.output
+        # Verify no table column headers
+        assert "Name" not in result.output
+        assert "Source" not in result.output
 
 
 @pytest.mark.cli

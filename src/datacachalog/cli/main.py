@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from datacachalog.core.exceptions import CatalogLoadError
 
@@ -330,19 +332,35 @@ def list_datasets(
         typer.echo("No datasets found. Run 'catalog init' to get started.")
         return
 
-    # Display datasets with catalog prefix
-    for catalog_name, name, source in all_datasets:
-        # Check cache state if --status flag is set
-        status_suffix = ""
-        if status:
-            state = _get_cache_state(cat, name)
-            status_suffix = f" [{state}]"
+    # Build Rich table
+    table = Table()
+    table.add_column("Name")
+    if status:
+        table.add_column("Source")
+        table.add_column("Status")
+    else:
+        table.add_column("Source")
 
+    # Add rows for each dataset
+    for catalog_name, name, source in all_datasets:
+        # Format name with catalog prefix if needed
         if len(catalogs) == 1 and catalog:
             # Single catalog mode - don't show prefix
-            typer.echo(f"{name}: {source}{status_suffix}")
+            display_name = name
         else:
-            typer.echo(f"{catalog_name}/{name}: {source}{status_suffix}")
+            display_name = f"{catalog_name}/{name}"
+
+        # Check cache state if --status flag is set
+        if status:
+            state = _get_cache_state(cat, name)
+            table.add_row(display_name, source, state)
+        else:
+            table.add_row(display_name, source)
+
+    # Print table using Rich Console
+    # Force terminal output to ensure tables render correctly in all environments
+    console = Console(force_terminal=True)
+    console.print(table)
 
 
 @app.command()
