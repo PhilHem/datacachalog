@@ -7,9 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
 
 from datacachalog.core.exceptions import CatalogLoadError
 
@@ -294,104 +291,6 @@ def fetch(
     except ValueError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(1) from None
-
-
-@app.command(name="list")
-def list_datasets(
-    catalog: str | None = typer.Option(
-        None,
-        "--catalog",
-        "-c",
-        help="Show datasets from a specific catalog only.",
-    ),
-    status: bool = typer.Option(
-        False,
-        "--status",
-        help="Show cache state (fresh/stale/missing).",
-    ),
-) -> None:
-    """List all datasets in the catalog."""
-    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
-
-    # Load datasets using helper
-    try:
-        all_datasets = _load_catalog_datasets(catalog_name=catalog)
-    except CatalogLoadError as e:
-        typer.echo(f"Error: {e}", err=True)
-        if e.recovery_hint:
-            typer.echo(f"Hint: {e.recovery_hint}", err=True)
-        raise typer.Exit(1) from None
-
-    if not all_datasets:
-        typer.echo("No datasets found. Run 'catalog init' to get started.")
-        return
-
-    # Build Rich table
-    table = Table()
-    table.add_column("Name")
-    if status:
-        table.add_column("Source")
-        table.add_column("Status")
-    else:
-        table.add_column("Source")
-
-    # Add rows for each dataset
-    for display_name, ds_name, source in all_datasets:
-        # Check cache state if --status flag is set
-        if status:
-            state = _get_cache_state(cat, ds_name)
-            colored_status = _format_status_with_color(state)
-            table.add_row(display_name, source, colored_status)
-        else:
-            table.add_row(display_name, source)
-
-    # Print table using Rich Console
-    # Force terminal output to ensure tables render correctly in all environments
-    console = Console(force_terminal=True)
-    console.print(table)
-
-
-@app.command()
-def status(
-    catalog: str | None = typer.Option(
-        None,
-        "--catalog",
-        "-c",
-        help="Show status for a specific catalog only.",
-    ),
-) -> None:
-    """Show cache state (cached/stale/missing) per dataset."""
-    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
-
-    # Load datasets using helper
-    try:
-        catalog_datasets = _load_catalog_datasets(catalog_name=catalog)
-    except CatalogLoadError as e:
-        typer.echo(f"Error: {e}", err=True)
-        if e.recovery_hint:
-            typer.echo(f"Hint: {e.recovery_hint}", err=True)
-        raise typer.Exit(1) from None
-
-    if not catalog_datasets:
-        typer.echo("No datasets found. Run 'catalog init' to get started.")
-        return
-
-    # Build Rich table
-    table = Table()
-    table.add_column("Name")
-    table.add_column("Status")
-
-    # Add rows for each dataset
-    for display_name, ds_name, _source in catalog_datasets:
-        state = _get_cache_state(cat, ds_name)
-
-        # Apply color coding to status
-        colored_status = _format_status_with_color(state)
-        table.add_row(display_name, colored_status)
-
-    # Print table using Rich Console
-    console = Console(force_terminal=True)
-    console.print(table)
 
 
 @app.command()
@@ -705,6 +604,8 @@ def cache_stats(
             cache_size = 0
 
         # Get freshness status using existing helper
+        from datacachalog.cli.formatting import _get_cache_state
+
         status = _get_cache_state(cat, ds_name)
 
         # Format output
@@ -714,92 +615,6 @@ def cache_stats(
         else:
             # Show missing datasets with 0 size
             typer.echo(f"  {prefix}{ds_name}: 0 B ({status})")
-
-
-def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
-    """Get cache state for a dataset (fresh/stale/missing)."""
-    cached = catalog._cache.get(dataset_name)
-    if cached is None:
-        return "missing"
-    elif catalog.is_stale(dataset_name):
-        return "stale"
-    else:
-        return "fresh"
-
-
-def _load_catalog_datasets(
-    catalog_name: str | None = None,
-) -> list[tuple[str, str, str]]:
-    """Load datasets from catalogs and return formatted list.
-
-    Args:
-        catalog_name: Optional catalog name to filter by.
-
-    Returns:
-        List of tuples (display_name, ds_name, source) for each dataset.
-
-    Raises:
-        CatalogLoadError: If catalog file cannot be loaded.
-    """
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
-
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        return []
-
-    # Filter to specific catalog if requested
-    if catalog_name:
-        if catalog_name not in catalogs:
-            return []
-        catalogs = {catalog_name: catalogs[catalog_name]}
-
-    # Load datasets per catalog to track catalog names
-    catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
-
-    for catalog_name_item, catalog_path in sorted(catalogs.items()):
-        datasets, _ = load_catalog(catalog_path)
-        # CatalogLoadError will propagate up if load_catalog fails
-        for ds in datasets:
-            catalog_datasets.append((catalog_name_item, ds.name, ds.source))
-
-    # Format display names based on catalog context
-    result: list[tuple[str, str, str]] = []
-    for catalog_name_item, ds_name, source in catalog_datasets:
-        # Format name with catalog prefix if needed
-        # When there's only one catalog and a filter was specified, don't show prefix
-        if len(catalogs) == 1 and catalog_name:
-            # Single catalog mode with filter - don't show prefix
-            display_name = ds_name
-        elif len(catalogs) == 1:
-            # Single catalog without filter - also don't show prefix (simpler UX)
-            display_name = ds_name
-        else:
-            # Multiple catalogs - show prefix
-            display_name = f"{catalog_name_item}/{ds_name}"
-        result.append((display_name, ds_name, source))
-
-    return result
-
-
-def _format_status_with_color(status: str) -> Text:
-    """Format status string with color coding.
-
-    Args:
-        status: Status string ("fresh", "stale", or "missing")
-
-    Returns:
-        Rich Text object with appropriate color:
-        - "fresh" -> green
-        - "stale" -> yellow
-        - "missing" -> red
-    """
-    from datacachalog.core.formatting import status_to_color
-
-    color = status_to_color(status)
-    return Text(status, style=color) if color else Text(status)
 
 
 def _format_size(size_bytes: int) -> str:
