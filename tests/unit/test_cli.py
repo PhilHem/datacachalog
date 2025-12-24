@@ -1559,7 +1559,7 @@ class TestCatalogStatus:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """status table applies color coding (green/yellow/red for fresh/stale/missing)."""
-        import time
+        import os
 
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
@@ -1592,7 +1592,15 @@ class TestCatalogStatus:
 
         # Fetch stale_dataset, then modify source to make it stale
         runner.invoke(app, ["fetch", "stale_dataset"])
-        time.sleep(0.1)  # Ensure different timestamp
+        # Backdate cache metadata file to ensure different timestamp
+        cache_dir = tmp_path / "data"
+        meta_file = cache_dir / "stale_dataset.meta.json"
+        if meta_file.exists():
+            # Backdate by 2 seconds to ensure it's older than source file modification
+            import time as time_module
+
+            old_time = time_module.time() - 2
+            os.utime(meta_file, (old_time, old_time))
         stale_file.write_text("id,name\n1,Bob\n2,David\n")
 
         # Don't fetch missing_dataset - it should show as missing

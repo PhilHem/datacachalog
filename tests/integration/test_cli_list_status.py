@@ -6,7 +6,7 @@ with filesystem adapter across different scenarios.
 
 from __future__ import annotations
 
-import time
+import os
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -67,7 +67,15 @@ class TestListStatusIntegration:
 
         # Fetch stale_dataset, then modify source to make it stale
         runner.invoke(app, ["fetch", "stale_dataset"])
-        time.sleep(1.1)  # Ensure different timestamp
+        # Backdate cache metadata file to ensure different timestamp
+        cache_dir = tmp_path / "data"
+        meta_file = cache_dir / "stale_dataset.meta.json"
+        if meta_file.exists():
+            # Backdate by 2 seconds to ensure it's older than source file modification
+            import time as time_module
+
+            old_time = time_module.time() - 2
+            os.utime(meta_file, (old_time, old_time))
         stale_file.write_text("id,name\n1,Bob\n2,David\n")
 
         # Don't fetch missing_dataset - it should show as missing
@@ -262,7 +270,15 @@ class TestListStatusIntegration:
 
         # Fetch stale_dataset, then modify source to make it stale
         runner.invoke(app, ["fetch", "stale_dataset"])
-        time.sleep(1.1)  # Ensure different timestamp
+        # Backdate cache metadata file to ensure different timestamp
+        cache_dir = tmp_path / "data"
+        meta_file = cache_dir / "stale_dataset.meta.json"
+        if meta_file.exists():
+            # Backdate by 2 seconds to ensure it's older than source file modification
+            import time as time_module
+
+            old_time = time_module.time() - 2
+            os.utime(meta_file, (old_time, old_time))
         stale_file.write_text("id,name\n1,Bob\n2,David\n")
 
         # Don't fetch missing_dataset - it should show as missing
