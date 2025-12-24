@@ -427,7 +427,7 @@ class TestCatalogList:
     def test_list_with_status_empty_catalog(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """list --status handles empty catalog gracefully."""
+        """list --status handles empty catalog gracefully with hint message, not error."""
         catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
         catalogs_dir.mkdir(parents=True)
         (catalogs_dir / "default.py").write_text(
@@ -442,8 +442,17 @@ class TestCatalogList:
 
         result = runner.invoke(app, ["list", "--status"])
 
-        assert result.exit_code == 0
-        assert "init" in result.output.lower()
+        # Verify success (not error)
+        assert result.exit_code == 0, "Command should succeed, not return error"
+        # Verify hint message is shown
+        assert "init" in result.output.lower(), "Should show hint message with 'init'"
+        assert "No datasets found" in result.output, (
+            "Should show 'No datasets found' message"
+        )
+        # Verify no error indicators
+        assert "Error:" not in result.output, "Should not show error message"
+        assert "Traceback" not in result.output, "Should not show traceback"
+        assert "Exception" not in result.output, "Should not show exception"
 
     @pytest.mark.cli
     @pytest.mark.tra("UseCase.List")
@@ -3285,3 +3294,288 @@ class TestLoadCatalogContext:
             assert exc_info.value.exit_code == 1
         finally:
             os.chdir(original_cwd)
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.CacheStats")
+@pytest.mark.tier(1)
+class TestCacheStats:
+    """Tests for catalog cache-stats command."""
+
+    def test_cache_stats_shows_total_size(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats shows total cache size correctly."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Total cache size:" in result.output
+
+    def test_cache_stats_shows_entry_count(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats shows total entry count matching cached datasets."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+                Dataset(name="orders", source="{storage_dir / "orders.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "orders"])
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Total entries:" in result.output
+        assert "2" in result.output  # Should show 2 entries
+
+    def test_cache_stats_shows_cache_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats shows cache directory path."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Cache directory:" in result.output
+        assert "data" in result.output
+
+    def test_cache_stats_shows_per_dataset_breakdown(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats shows per-dataset breakdown format."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "orders.csv").write_text("id,amount\n1,100\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+                Dataset(name="orders", source="{storage_dir / "orders.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "orders"])
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Per-dataset breakdown:" in result.output
+        assert "customers:" in result.output
+        assert "orders:" in result.output
+
+    def test_cache_stats_shows_freshness_status(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats shows fresh/stale status correctly."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers:" in result.output
+        assert "(fresh)" in result.output or "(stale)" in result.output
+
+    def test_cache_stats_with_empty_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats handles empty cache correctly."""
+        # Create source file
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        # Create catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Don't fetch - cache should be empty
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "Total cache size:" in result.output
+        assert "Total entries:" in result.output
+        assert "0" in result.output  # Should show 0 entries
+
+    def test_cache_stats_with_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats --catalog X shows only that catalog's datasets."""
+        # Create source files
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        (storage_dir / "customers.csv").write_text("id,name\n1,Alice\n")
+        (storage_dir / "metrics.csv").write_text("id,value\n1,42\n")
+
+        # Create two catalogs
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{storage_dir / "customers.csv"}"),
+            ]
+        """)
+        )
+
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{storage_dir / "metrics.csv"}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both to populate cache
+        runner.invoke(app, ["fetch", "customers", "--catalog", "core"])
+        runner.invoke(app, ["fetch", "metrics", "--catalog", "analytics"])
+
+        result = runner.invoke(app, ["cache-stats", "--catalog", "core"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        assert "customers:" in result.output
+        assert "metrics:" not in result.output
+
+    def test_cache_stats_with_no_datasets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cache-stats handles empty catalog correctly."""
+        # Create empty catalog
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["cache-stats"])
+
+        assert result.exit_code == 0, f"Failed with: {result.output}"
+        # Should show appropriate message or empty breakdown
+        assert (
+            "Total cache size:" in result.output
+            or "No datasets" in result.output.lower()
+        )

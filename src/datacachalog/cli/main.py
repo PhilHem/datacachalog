@@ -646,6 +646,70 @@ def _show_dataset_info(
         typer.echo(f"  Description: {dataset.description}")
 
 
+@app.command("cache-stats")
+def cache_stats(
+    catalog: str | None = typer.Option(
+        None,
+        "--catalog",
+        "-c",
+        help="Show cache stats for datasets from a specific catalog only.",
+    ),
+) -> None:
+    """Display comprehensive cache statistics."""
+    from datacachalog.discovery import load_catalog
+
+    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
+
+    # Calculate total cache size and entry count
+    # Note: size() and cache_dir are FileCache-specific, not in CachePort protocol
+    total_size = cat._cache.size()  # type: ignore[attr-defined]
+    total_entries = len(cat._cache.list_all_keys())
+
+    # Display total stats
+    typer.echo(f"Total cache size: {_format_size(total_size)}")
+    typer.echo(f"Total entries: {total_entries}")
+    typer.echo(f"Cache directory: {cat._cache.cache_dir}")  # type: ignore[attr-defined]
+
+    # Load datasets per catalog to track catalog names
+    catalog_datasets: list[
+        tuple[str, str, Dataset]
+    ] = []  # (catalog_name, ds_name, dataset)
+    for catalog_name, catalog_path in sorted(catalogs.items()):
+        try:
+            datasets, _ = load_catalog(catalog_path)
+        except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        for ds in datasets:
+            catalog_datasets.append((catalog_name, ds.name, ds))
+
+    if not catalog_datasets:
+        typer.echo("\nNo datasets found. Run 'catalog init' to get started.")
+        return
+
+    # Display per-dataset breakdown
+    typer.echo("\nPer-dataset breakdown:")
+    for catalog_name, ds_name, _dataset in catalog_datasets:
+        # Calculate cache size for this dataset
+        try:
+            cache_size = cat.cache_size(ds_name)
+        except Exception:
+            cache_size = 0
+
+        # Get freshness status using existing helper
+        status = _get_cache_state(cat, ds_name)
+
+        # Format output
+        prefix = f"{catalog_name}/" if len(catalogs) > 1 else ""
+        if cache_size > 0:
+            typer.echo(f"  {prefix}{ds_name}: {_format_size(cache_size)} ({status})")
+        else:
+            # Show missing datasets with 0 size
+            typer.echo(f"  {prefix}{ds_name}: 0 B ({status})")
+
+
 def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
     """Get cache state for a dataset (fresh/stale/missing)."""
     cached = catalog._cache.get(dataset_name)
