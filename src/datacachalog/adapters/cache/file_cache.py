@@ -159,6 +159,30 @@ class FileCache:
 
         return count
 
+    def list_all_keys(self) -> list[str]:
+        """List all cache keys.
+
+        Returns:
+            List of all keys currently in the cache.
+        """
+        if not self.cache_dir.exists():
+            return []
+
+        keys = []
+        # Find all metadata files recursively
+        for meta_path in self.cache_dir.rglob("*.meta.json"):
+            # Extract key: relative path from cache_dir, remove .meta.json suffix
+            relative_path = meta_path.relative_to(self.cache_dir)
+            key_str = str(relative_path)
+            if key_str.endswith(".meta.json"):
+                key = key_str[:-10]  # Remove ".meta.json" (10 chars)
+                # Verify both data file and metadata exist
+                data_path = self._file_path(key)
+                if data_path.exists() and meta_path.exists():
+                    keys.append(key)
+
+        return sorted(keys)  # Return sorted for deterministic output
+
     def _cleanup_empty_dirs(self, path: Path) -> None:
         """Remove empty directories recursively up to cache_dir."""
         try:

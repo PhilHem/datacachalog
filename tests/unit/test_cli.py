@@ -13,6 +13,7 @@ runner = CliRunner()
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Init")
 @pytest.mark.tier(1)
 class TestCatalogInit:
     """Tests for catalog init command."""
@@ -103,6 +104,7 @@ class TestCatalogInit:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.List")
 @pytest.mark.tier(1)
 class TestCatalogList:
     """Tests for catalog list command."""
@@ -191,7 +193,6 @@ class TestCatalogList:
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Fetch")
-@pytest.mark.tier(1)
 class TestCatalogFetch:
     """Tests for catalog fetch command."""
 
@@ -933,6 +934,7 @@ class TestCatalogFetch:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Status")
 @pytest.mark.tier(1)
 class TestCatalogStatus:
     """Tests for catalog status command."""
@@ -1089,6 +1091,7 @@ class TestCatalogStatus:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Invalidate")
 @pytest.mark.tier(1)
 class TestCatalogInvalidate:
     """Tests for catalog invalidate command."""
@@ -1151,6 +1154,7 @@ class TestCatalogInvalidate:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.LoadErrors")
 @pytest.mark.tier(1)
 class TestCatalogLoadErrors:
     """Tests for graceful error handling when catalog files are malformed."""
@@ -1242,6 +1246,7 @@ class TestCatalogLoadErrors:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.InvalidateGlob")
 @pytest.mark.tier(1)
 class TestCatalogInvalidateGlob:
     """Tests for catalog invalidate-glob command."""
@@ -1348,6 +1353,7 @@ class TestCatalogInvalidateGlob:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Versions")
 @pytest.mark.tier(2)
 class TestCatalogVersions:
     """Tests for catalog versions command."""
@@ -1705,7 +1711,6 @@ class TestCatalogVersions:
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Push")
-@pytest.mark.tier(1)
 class TestCatalogPush:
     """Tests for catalog push command."""
 
@@ -1948,6 +1953,7 @@ class TestCatalogPush:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.Info")
 @pytest.mark.tier(1)
 class TestCatalogInfo:
     """Tests for catalog info command."""

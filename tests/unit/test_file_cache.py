@@ -328,3 +328,101 @@ class TestCacheSize:
         stats = cache.statistics()
         assert stats["total_size"] > 0
         assert stats["file_count"] >= 2  # At least 2 data files (plus metadata files)
+
+
+@pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
+@pytest.mark.tier(1)
+class TestListAllKeys:
+    """Tests for list_all_keys() method."""
+
+    def test_list_all_keys_returns_empty_list_when_cache_empty(
+        self, tmp_path: Path
+    ) -> None:
+        """list_all_keys() should return empty list when cache_dir is empty or doesn't exist."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        keys = cache.list_all_keys()
+        assert keys == []
+
+    def test_list_all_keys_returns_all_cache_keys(self, tmp_path: Path) -> None:
+        """list_all_keys() should return all keys from .meta.json files in cache."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("key1", source, CacheMetadata(etag='"a"'))
+        cache.put("key2", source, CacheMetadata(etag='"b"'))
+        cache.put("key3", source, CacheMetadata(etag='"c"'))
+
+        keys = cache.list_all_keys()
+        assert len(keys) == 3
+        assert "key1" in keys
+        assert "key2" in keys
+        assert "key3" in keys
+
+    def test_list_all_keys_handles_nested_directories(self, tmp_path: Path) -> None:
+        """list_all_keys() should return keys from nested directory structures."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("logs/2024/01/data.parquet", source, CacheMetadata(etag='"a"'))
+        cache.put("logs/2024/02/data.parquet", source, CacheMetadata(etag='"b"'))
+        cache.put("other/file.txt", source, CacheMetadata(etag='"c"'))
+
+        keys = cache.list_all_keys()
+        assert len(keys) == 3
+        assert "logs/2024/01/data.parquet" in keys
+        assert "logs/2024/02/data.parquet" in keys
+        assert "other/file.txt" in keys
+
+    def test_list_all_keys_excludes_orphaned_files(self, tmp_path: Path) -> None:
+        """list_all_keys() should only return keys that have both data file and metadata file."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        # Create valid cache entry
+        cache.put("valid_key", source, CacheMetadata(etag='"a"'))
+
+        # Create orphaned data file without metadata
+        (tmp_path / "orphan_data").write_text("orphan")
+
+        # Create orphaned metadata without data file
+        (tmp_path / "orphan_meta.meta.json").write_text(
+            '{"etag": "b", "cached_at": "2024-01-01T00:00:00"}'
+        )
+
+        keys = cache.list_all_keys()
+        assert len(keys) == 1
+        assert "valid_key" in keys
+        assert "orphan_data" not in keys
+        assert "orphan_meta" not in keys
+
+    def test_list_all_keys_returns_keys_relative_to_cache_dir(
+        self, tmp_path: Path
+    ) -> None:
+        """list_all_keys() should return keys as relative paths from cache_dir root."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        cache.put("top_level.txt", source, CacheMetadata(etag='"a"'))
+        cache.put("nested/path/file.txt", source, CacheMetadata(etag='"b"'))
+
+        keys = cache.list_all_keys()
+        assert "top_level.txt" in keys
+        assert "nested/path/file.txt" in keys
+        # Keys should be relative, not absolute paths
+        assert not any("/" in key for key in keys if key == "top_level.txt")
+        assert "nested/path/file.txt" in keys

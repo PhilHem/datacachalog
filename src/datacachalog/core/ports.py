@@ -147,6 +147,14 @@ class CachePort(Protocol):
         """
         ...
 
+    def list_all_keys(self) -> builtins.list[str]:
+        """List all cache keys.
+
+        Returns:
+            List of all keys currently in the cache.
+        """
+        ...
+
 
 @runtime_checkable
 class ProgressReporter(Protocol):

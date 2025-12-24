@@ -89,6 +89,7 @@ def test_class_satisfies_storage_port(fake_storage):
 @pytest.mark.tier(0)
 def test_class_satisfies_cache_port():
     """A class with matching methods should satisfy CachePort via isinstance."""
+    import builtins
     from pathlib import Path
 
     from datacachalog.core.models import CacheMetadata
@@ -107,8 +108,51 @@ def test_class_satisfies_cache_port():
         def invalidate_prefix(self, prefix: str) -> int:
             return 0
 
+        def list_all_keys(self) -> builtins.list[str]:
+            return []
+
     cache: CachePort = FakeCache()
     assert isinstance(cache, CachePort)
+
+
+@pytest.mark.core
+@pytest.mark.tra("Port.CachePort")
+@pytest.mark.tier(0)
+class TestListAllKeys:
+    """Tests for list_all_keys() method in CachePort protocol."""
+
+    def test_cache_port_has_list_all_keys_method(self) -> None:
+        """CachePort should have a list_all_keys method."""
+        from datacachalog.core.ports import CachePort
+
+        assert hasattr(CachePort, "list_all_keys")
+
+    def test_fake_cache_satisfies_cache_port_with_list_all_keys(self) -> None:
+        """A fake cache with list_all_keys() should satisfy CachePort protocol."""
+        import builtins
+        from pathlib import Path
+
+        from datacachalog.core.models import CacheMetadata
+        from datacachalog.core.ports import CachePort
+
+        class FakeCache:
+            def get(self, key: str) -> tuple[Path, CacheMetadata] | None:
+                return None
+
+            def put(self, key: str, path: Path, metadata: CacheMetadata) -> None:
+                pass
+
+            def invalidate(self, key: str) -> None:
+                pass
+
+            def invalidate_prefix(self, prefix: str) -> int:
+                return 0
+
+            def list_all_keys(self) -> builtins.list[str]:
+                return []
+
+        cache: CachePort = FakeCache()
+        assert isinstance(cache, CachePort)
 
 
 @pytest.mark.core

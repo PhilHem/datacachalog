@@ -1,0 +1,37 @@
+# Architecture and Test Compliance Issues
+# Generated: 2025-12-24
+# Deliverable: CLI boilerplate reduction - extract shared catalog loading context
+
+unconfirmed:
+  - id: CLI-001
+    verification: tra
+    complexity: MED
+    source: arch-analysis
+    description: CLI tests missing TRA markers - 60+ test methods across 9 test classes without @tra annotations. Only TestCatalogFetch and TestCatalogPush have class-level TRA markers.
+    location: tests/unit/test_cli.py (TestCatalogInit, TestCatalogList, TestCatalogStatus, TestCatalogInvalidate, TestCatalogLoadErrors, TestCatalogInvalidateGlob, TestCatalogVersions, TestCatalogInfo, and most methods in TestCatalogFetch)
+    timestamp: 2025-12-24
+    related: []
+
+  - id: CLI-002
+    verification: tier
+    complexity: EASY
+    source: arch-analysis
+    description: Redundant @tier markers - both class and method level in TestCatalogFetch and TestCatalogInit. Method-level markers override class-level, making class-level redundant.
+    location: tests/unit/test_cli.py (TestCatalogFetch class line 194, methods lines 198+; TestCatalogInit class line 16)
+    timestamp: 2025-12-24
+    related: []
+
+  - id: CLI-003
+    verification: unit
+    complexity: MED
+    source: arch-analysis
+    description: "Repeated catalog loading boilerplate across 8 CLI commands - violates DRY principle. Pattern: find_project_root() → discover_catalogs() → filter by --catalog flag → load_catalog() loop → Catalog.from_directory(). Should be extracted to helper function."
+    location: src/datacachalog/cli/main.py (fetch:194-221, list:284-310, status:340-379, invalidate:408-430, invalidate_glob:452-474, versions:508-530, push:582-612, info:668-704)
+    timestamp: 2025-12-24
+    related: []
+
+confirmed:
+  # Structural issues that can be confirmed directly
+
+resolved:
+  # No resolved issues yet
