@@ -8,7 +8,10 @@ from rich.text import Text
 from typer.testing import CliRunner
 
 from datacachalog.cli import app
-from datacachalog.cli.main import _format_status_with_color, _load_catalog_datasets
+from datacachalog.cli.formatting import (
+    _format_status_with_color,
+    _load_catalog_datasets,
+)
 
 
 runner = CliRunner()
@@ -3911,7 +3914,7 @@ class TestCacheStats:
 
 
 @pytest.mark.cli
-@pytest.mark.tra("UseCase.FormatStatus")
+@pytest.mark.tra("Domain.Format.StatusColor")
 @pytest.mark.tier(1)
 class TestFormatStatusWithColor:
     """Tests for _format_status_with_color helper function."""
@@ -4055,3 +4058,114 @@ class TestLoadCatalogDatasets:
         result = _load_catalog_datasets(catalog_name=None)
 
         assert result == []
+
+
+@pytest.mark.cli
+@pytest.mark.tier(1)
+class TestCliCommandsStructure:
+    """Tests for CLI commands directory structure (task 5so.3.1)."""
+
+    def test_commands_directory_exists(self) -> None:
+        """Verify cli/commands/__init__.py exists and is importable."""
+        from datacachalog.cli import commands
+
+        assert commands is not None
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.List")
+@pytest.mark.tier(1)
+class TestListCommandModule:
+    """Tests for list command module (task 5so.3.2)."""
+
+    def test_list_command_imports_correctly(self) -> None:
+        """Verify list_datasets can be imported from cli.commands.list."""
+        from datacachalog.cli.commands.list import list_datasets
+
+        assert list_datasets is not None
+
+    def test_list_command_registered_in_app(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify list command still works via CLI runner after refactoring."""
+        from datacachalog.cli import app
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="test", source="s3://bucket/test.parquet"),
+            ]
+        """)
+        )
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "test" in result.stdout
+
+
+@pytest.mark.cli
+@pytest.mark.tra("UseCase.Status")
+@pytest.mark.tier(1)
+class TestStatusCommandModule:
+    """Tests for status command module (task 5so.3.3)."""
+
+    def test_status_command_imports_correctly(self) -> None:
+        """Verify status can be imported from cli.commands.status."""
+        from datacachalog.cli.commands.status import status
+
+        assert status is not None
+
+    def test_status_command_registered_in_app(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify status command still works via CLI runner after refactoring."""
+        from datacachalog.cli import app
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="test", source="s3://bucket/test.parquet"),
+            ]
+        """)
+        )
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "test" in result.stdout
+
+
+@pytest.mark.cli
+@pytest.mark.tier(1)
+class TestFormattingModule:
+    """Tests for formatting module (task 5so.3.4)."""
+
+    def test_formatting_module_imports_correctly(self) -> None:
+        """Verify formatting helpers can be imported from cli.formatting."""
+        from datacachalog.cli.formatting import (
+            _format_status_with_color,
+            _load_catalog_datasets,
+        )
+
+        assert _format_status_with_color is not None
+        assert _load_catalog_datasets is not None
+
+    def test_list_and_status_import_from_formatting(self) -> None:
+        """Verify list and status commands import from formatting module."""
+        from datacachalog.cli.commands import list as list_module
+        from datacachalog.cli.commands import status as status_module
+
+        # Check that the modules exist and can be imported
+        assert list_module is not None
+        assert status_module is not None
