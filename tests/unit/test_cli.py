@@ -190,6 +190,261 @@ class TestCatalogList:
 
         assert "init" in result.output.lower()
 
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_without_status_flag_unchanged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list without --status flag shows original format."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="s3://bucket/customers.parquet"),
+            ]
+        """)
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "customers: s3://bucket/customers.parquet" in result.output
+        assert "[" not in result.output  # No status brackets
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_shows_fresh_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status shows [fresh] when dataset is cached and not stale."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        assert "customers" in result.output
+        assert "[fresh]" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_shows_stale_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status shows [stale] when dataset is cached but stale."""
+        import time
+
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+
+        # Modify source file to make cache stale
+        time.sleep(1.1)  # Ensure different timestamp
+        source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        assert "customers" in result.output
+        assert "[stale]" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_shows_missing_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status shows [missing] when dataset is not cached."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file = storage_dir / "data.csv"
+        source_file.write_text("id,name\n1,Alice\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Don't fetch - dataset should be missing
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        assert "customers" in result.output
+        assert "[missing]" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_and_catalog_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status --catalog X shows status for that catalog only."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file1 = storage_dir / "data1.csv"
+        source_file1.write_text("id,name\n1,Alice\n")
+        source_file2 = storage_dir / "data2.csv"
+        source_file2.write_text("id,name\n1,Bob\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file1}"),
+            ]
+        """)
+        )
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{source_file2}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "metrics"])
+
+        result = runner.invoke(app, ["list", "--status", "--catalog", "core"])
+
+        assert result.exit_code == 0
+        assert "customers" in result.output
+        assert "[fresh]" in result.output
+        assert "metrics" not in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_multiple_catalogs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status shows status with catalog prefixes for multiple catalogs."""
+        storage_dir = tmp_path / "storage"
+        storage_dir.mkdir()
+        source_file1 = storage_dir / "data1.csv"
+        source_file1.write_text("id,name\n1,Alice\n")
+        source_file2 = storage_dir / "data2.csv"
+        source_file2.write_text("id,name\n1,Bob\n")
+
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "core.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="customers", source="{source_file1}"),
+            ]
+        """)
+        )
+        (catalogs_dir / "analytics.py").write_text(
+            dedent(f"""\
+            from datacachalog import Dataset
+            datasets = [
+                Dataset(name="metrics", source="{source_file2}"),
+            ]
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Fetch both to populate cache
+        runner.invoke(app, ["fetch", "customers"])
+        runner.invoke(app, ["fetch", "metrics"])
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        assert "core/customers" in result.output
+        assert "analytics/metrics" in result.output
+        assert "[fresh]" in result.output
+
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_with_status_empty_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list --status handles empty catalog gracefully."""
+        catalogs_dir = tmp_path / ".datacachalog" / "catalogs"
+        catalogs_dir.mkdir(parents=True)
+        (catalogs_dir / "default.py").write_text(
+            dedent("""\
+            from datacachalog import Dataset
+            datasets = []
+        """)
+        )
+
+        (tmp_path / "data").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["list", "--status"])
+
+        assert result.exit_code == 0
+        assert "init" in result.output.lower()
+
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Fetch")

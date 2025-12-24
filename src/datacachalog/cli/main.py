@@ -223,10 +223,8 @@ def fetch(
     ),
 ) -> None:
     """Fetch a dataset, downloading if stale."""
-    from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
-    from datacachalog.config import find_project_root
+    from datacachalog import DatasetNotFoundError, RichProgressReporter
     from datacachalog.core.exceptions import VersionNotFoundError
-    from datacachalog.discovery import discover_catalogs, load_catalog
 
     # Validate arguments
     if not name and not all_datasets:
@@ -245,34 +243,7 @@ def fetch(
         typer.echo("Error: --as-of and --version-id are mutually exclusive.")
         raise typer.Exit(1)
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    # Filter to specific catalog if requested
-    if catalog:
-        if catalog not in catalogs:
-            typer.echo(f"Catalog '{catalog}' not found.")
-            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
-            raise typer.Exit(1)
-        catalogs = {catalog: catalogs[catalog]}
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    # Create catalog and fetch
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
 
     # Make as_of timezone-aware (UTC) if provided
     # Typer parses date strings as naive datetimes, but S3 versions are timezone-aware
@@ -330,25 +301,16 @@ def list_datasets(
         "-c",
         help="Show datasets from a specific catalog only.",
     ),
+    status: bool = typer.Option(
+        False,
+        "--status",
+        help="Show cache state (fresh/stale/missing).",
+    ),
 ) -> None:
     """List all datasets in the catalog."""
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog.discovery import load_catalog
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No datasets found. Run 'catalog init' to get started.")
-        return
-
-    # Filter to specific catalog if requested
-    if catalog:
-        if catalog not in catalogs:
-            typer.echo(f"Catalog '{catalog}' not found.")
-            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
-            raise typer.Exit(1)
-        catalogs = {catalog: catalogs[catalog]}
+    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
 
     # Load and display datasets
     all_datasets: list[tuple[str, str, str]] = []  # (catalog, name, source)
@@ -370,11 +332,17 @@ def list_datasets(
 
     # Display datasets with catalog prefix
     for catalog_name, name, source in all_datasets:
+        # Check cache state if --status flag is set
+        status_suffix = ""
+        if status:
+            state = _get_cache_state(cat, name)
+            status_suffix = f" [{state}]"
+
         if len(catalogs) == 1 and catalog:
             # Single catalog mode - don't show prefix
-            typer.echo(f"{name}: {source}")
+            typer.echo(f"{name}: {source}{status_suffix}")
         else:
-            typer.echo(f"{catalog_name}/{name}: {source}")
+            typer.echo(f"{catalog_name}/{name}: {source}{status_suffix}")
 
 
 @app.command()
@@ -387,33 +355,16 @@ def status(
     ),
 ) -> None:
     """Show cache state (cached/stale/missing) per dataset."""
-    from datacachalog import Catalog
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog.discovery import load_catalog
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
+    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
 
-    if not catalogs:
-        typer.echo("No datasets found. Run 'catalog init' to get started.")
-        return
-
-    # Filter to specific catalog if requested
-    if catalog:
-        if catalog not in catalogs:
-            typer.echo(f"Catalog '{catalog}' not found.")
-            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
-            raise typer.Exit(1)
-        catalogs = {catalog: catalogs[catalog]}
-
-    # Load datasets per catalog
+    # Load datasets per catalog to track catalog names
     catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
-    all_ds = []
-    cache_dir = "data"
 
     for catalog_name, catalog_path in sorted(catalogs.items()):
         try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
+            datasets, _ = load_catalog(catalog_path)
         except CatalogLoadError as e:
             typer.echo(f"Error: {e}", err=True)
             if e.recovery_hint:
@@ -421,27 +372,14 @@ def status(
             raise typer.Exit(1) from None
         for ds in datasets:
             catalog_datasets.append((catalog_name, ds.name, ds.source))
-            all_ds.append(ds)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
 
     if not catalog_datasets:
         typer.echo("No datasets found. Run 'catalog init' to get started.")
         return
 
-    # Create catalog to check status
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
-
     # Check status for each dataset
     for catalog_name, ds_name, _source in catalog_datasets:
-        # Check if cached
-        cached = cat._cache.get(ds_name)
-        if cached is None:
-            state = "missing"
-        elif cat.is_stale(ds_name):
-            state = "stale"
-        else:
-            state = "fresh"
+        state = _get_cache_state(cat, ds_name)
 
         # Format output
         if len(catalogs) == 1 and catalog:
@@ -455,33 +393,9 @@ def invalidate(
     name: str = typer.Argument(help="Name of the dataset to invalidate."),
 ) -> None:
     """Remove dataset from cache, forcing re-download on next fetch."""
-    from datacachalog import Catalog, DatasetNotFoundError
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog import DatasetNotFoundError
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No catalogs found. Run 'catalog init' to get started.")
-        raise typer.Exit(1)
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context()
 
     try:
         cat.get_dataset(name)  # Validate exists
@@ -499,33 +413,9 @@ def invalidate_glob(
     name: str = typer.Argument(help="Name of the glob dataset to invalidate."),
 ) -> None:
     """Remove all cached files for a glob pattern dataset."""
-    from datacachalog import Catalog, DatasetNotFoundError
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog import DatasetNotFoundError
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No catalogs found. Run 'catalog init' to get started.")
-        raise typer.Exit(1)
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context()
 
     try:
         count = cat.invalidate_glob(name)
@@ -543,33 +433,7 @@ def invalidate_glob(
 @app.command()
 def clean() -> None:
     """Remove orphaned cache files not belonging to any dataset."""
-    from datacachalog import Catalog
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
-
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No catalogs found. Run 'catalog init' to get started.")
-        raise typer.Exit(1)
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context()
 
     count = cat.clean_orphaned()
     typer.echo(f"Cleaned {count} orphaned cache file(s).")
@@ -589,34 +453,10 @@ def versions(
 
     Shows version history with timestamps. Requires S3 with versioning enabled.
     """
-    from datacachalog import Catalog, DatasetNotFoundError
-    from datacachalog.config import find_project_root
+    from datacachalog import DatasetNotFoundError
     from datacachalog.core.exceptions import VersioningNotSupportedError
-    from datacachalog.discovery import discover_catalogs, load_catalog
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No catalogs found. Run 'catalog init' to get started.")
-        raise typer.Exit(1)
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context()
 
     try:
         version_list = cat.versions(name, limit=limit)
@@ -664,41 +504,9 @@ def push(
     ),
 ) -> None:
     """Upload a local file to a dataset's remote source."""
-    from datacachalog import Catalog, DatasetNotFoundError, RichProgressReporter
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog import DatasetNotFoundError, RichProgressReporter
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
-
-    if not catalogs:
-        typer.echo("No catalogs found. Run 'catalog init' to get started.")
-        raise typer.Exit(1)
-
-    # Filter to specific catalog if requested
-    if catalog:
-        if catalog not in catalogs:
-            typer.echo(f"Catalog '{catalog}' not found.")
-            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
-            raise typer.Exit(1)
-        catalogs = {catalog: catalogs[catalog]}
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
-    for _catalog_name, catalog_path in catalogs.items():
-        try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
-        except CatalogLoadError as e:
-            typer.echo(f"Error: {e}", err=True)
-            if e.recovery_hint:
-                typer.echo(f"Hint: {e.recovery_hint}", err=True)
-            raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
-
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
+    cat, _root, _catalogs = load_catalog_context(catalog_name=catalog)
 
     local_file = Path(local_path)
     if not local_file.exists():
@@ -736,9 +544,8 @@ def info(
     ),
 ) -> None:
     """Show detailed information about datasets."""
-    from datacachalog import Catalog, DatasetNotFoundError
-    from datacachalog.config import find_project_root
-    from datacachalog.discovery import discover_catalogs, load_catalog
+    from datacachalog import DatasetNotFoundError
+    from datacachalog.discovery import load_catalog
 
     # Validate arguments
     # If --catalog is specified without name or --all, treat as --all for that catalog
@@ -754,43 +561,22 @@ def info(
     if catalog and not name and not all_datasets:
         all_datasets = True
 
-    root = find_project_root()
-    catalogs = discover_catalogs(root)
+    cat, _root, catalogs = load_catalog_context(catalog_name=catalog)
 
-    if not catalogs:
-        typer.echo("No datasets found. Run 'catalog init' to get started.")
-        return
-
-    # Filter to specific catalog if requested
-    if catalog:
-        if catalog not in catalogs:
-            typer.echo(f"Catalog '{catalog}' not found.")
-            typer.echo(f"Available catalogs: {', '.join(sorted(catalogs.keys()))}")
-            raise typer.Exit(1)
-        catalogs = {catalog: catalogs[catalog]}
-
-    # Load all datasets
-    all_ds = []
-    cache_dir = "data"
+    # Load datasets per catalog to track catalog names
     catalog_datasets: list[
         tuple[str, str, Dataset]
     ] = []  # (catalog_name, ds_name, dataset)
     for catalog_name, catalog_path in catalogs.items():
         try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
+            datasets, _ = load_catalog(catalog_path)
         except CatalogLoadError as e:
             typer.echo(f"Error: {e}", err=True)
             if e.recovery_hint:
                 typer.echo(f"Hint: {e.recovery_hint}", err=True)
             raise typer.Exit(1) from None
-        all_ds.extend(datasets)
-        if cat_cache_dir:
-            cache_dir = cat_cache_dir
         for ds in datasets:
             catalog_datasets.append((catalog_name, ds.name, ds))
-
-    # Create catalog (needed even if empty for dataset lookup)
-    cat = Catalog.from_directory(all_ds, directory=root, cache_dir=cache_dir)
 
     # Filter datasets to show
     if name:
@@ -858,6 +644,17 @@ def _show_dataset_info(
         typer.echo(f"  Cache size: {cache_size_str}")
     if dataset.description:
         typer.echo(f"  Description: {dataset.description}")
+
+
+def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
+    """Get cache state for a dataset (fresh/stale/missing)."""
+    cached = catalog._cache.get(dataset_name)
+    if cached is None:
+        return "missing"
+    elif catalog.is_stale(dataset_name):
+        return "stale"
+    else:
+        return "fresh"
 
 
 def _format_size(size_bytes: int) -> str:
