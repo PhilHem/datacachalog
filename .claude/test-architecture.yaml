@@ -23,3 +23,36 @@ SYNC_ONLY_LAYERS: "src/datacachalog/core/"
 
 # Patterns to detect concurrency smells
 CONCURRENCY_SMELLS: "async def, ProcessPoolExecutor, ThreadPoolExecutor, threading.Lock, asyncio.Lock"
+
+# ============================================================================
+# Critical Path Integration Tests
+# ============================================================================
+# The most impactful integration tests that validate end-to-end flows.
+# These should use the fastest possible tier (prefer fakes over real adapters).
+#
+# Rules:
+# - Start with 3 critical paths, add more if obvious value exists
+# - Each must test a complete user-facing flow
+# - Prefer Tier 1 (fakes) over Tier 2 (real adapters) where possible
+# - Must have TRA anchors in UseCase or Adapter namespace
+#
+CRITICAL_PATH_TESTS:
+  - name: "Fetch flow (storage → cache → path)"
+    tra: "UseCase.Fetch.CriticalPath"
+    tier: 1  # Uses filesystem adapter (fast)
+    description: "Complete fetch: check staleness, download if needed, return cached path"
+    location: "tests/integration/test_catalog_router.py"
+
+  - name: "Staleness detection"
+    tra: "UseCase.Fetch.StalenessCheck"
+    tier: 1  # Uses filesystem adapter (fast)
+    description: "Detect stale cache via ETag/LastModified, trigger re-download"
+    location: "tests/unit/test_catalog.py"
+
+  - name: "Push flow (local → storage)"
+    tra: "UseCase.Push.CriticalPath"
+    tier: 1  # Uses filesystem adapter (fast)
+    description: "Upload local file to storage, update cache metadata"
+    location: "tests/unit/test_catalog_push.py"
+
+# Validation: /provision checks that these tests exist and match contract
