@@ -445,6 +445,17 @@ class TestCatalogList:
         assert result.exit_code == 0
         assert "init" in result.output.lower()
 
+    @pytest.mark.cli
+    @pytest.mark.tra("UseCase.List")
+    @pytest.mark.tier(1)
+    def test_list_help_shows_status_flag(self) -> None:
+        """list --help shows --status flag with correct description."""
+        result = runner.invoke(app, ["list", "--help"])
+
+        assert result.exit_code == 0
+        assert "--status" in result.output
+        assert "Show cache state (fresh/stale/missing)" in result.output
+
 
 @pytest.mark.cli
 @pytest.mark.tra("UseCase.Fetch")
