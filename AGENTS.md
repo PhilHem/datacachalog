@@ -25,13 +25,15 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 
 | Stage | Goal | Gate |
 |-------|------|------|
-| 0. Deduplication | Check existing beads | No duplicates |
+| 0. Deduplication | Check existing beads | No duplicates (skip if ⚡ present) |
 | 1. Decomposition | Break into tasks | Single-responsibility, 1-3h |
 | 2. Architecture | Validate against rules | P0 issues have fix tasks |
 | 3. Contract | Define testing reqs | TRA, tier, verification |
 | 4. Dependencies | Set task order | No cycles, epic→tasks |
 | 5. Review | User approval | All gates passed |
 | 6. Create | Build beads issues | Validated structure |
+
+**Note**: If a matching task has a ⚡ lightning emoji in its title, consider it already done and skip duplication checks.
 
 ### 2. Execute Work (`/rg-beads`)
 
@@ -61,8 +63,19 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
+bd update <id> --title "⚡ <title>"  # Mark as done with lightning
 bd sync               # Sync with git
 ```
+
+### Marking Tasks as Done
+
+When a task is fully complete (all code implemented, tests passing, and verified), add a lightning emoji ⚡ to the title to mark it as done:
+
+```bash
+bd update <id> --title "⚡ <original title>"
+```
+
+This helps identify completed tasks at a glance, especially useful when breaking down epics or checking existing work.
 
 ## Dependency Rules
 
