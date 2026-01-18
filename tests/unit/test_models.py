@@ -46,8 +46,8 @@ class TestDataset:
         assert dataset.cache_path == cache_path
 
     @pytest.mark.core
-    def test_dataset_immutable(self) -> None:
-        """Dataset is immutable (frozen dataclass)."""
+    def test_dataset_rejects_mutation(self) -> None:
+        """Dataset rejects attribute mutation (frozen=True dataclass)."""
         dataset = Dataset(name="test", source="s3://bucket/file.parquet")
 
         with pytest.raises(AttributeError):
