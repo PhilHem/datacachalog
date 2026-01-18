@@ -426,3 +426,112 @@ class TestListAllKeys:
         # Keys should be relative, not absolute paths
         assert not any("/" in key for key in keys if key == "top_level.txt")
         assert "nested/path/file.txt" in keys
+
+
+@pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
+@pytest.mark.tier(1)
+class TestInvalidCacheKeyError:
+    """Tests for InvalidCacheKeyError exception."""
+
+    def test_invalid_cache_key_error_inherits_from_cache_error(self) -> None:
+        """InvalidCacheKeyError should inherit from CacheError."""
+        from datacachalog.core.exceptions import CacheError, InvalidCacheKeyError
+
+        error = InvalidCacheKeyError(key="bad/key", reason="contains ..")
+        assert isinstance(error, CacheError)
+
+    def test_invalid_cache_key_error_stores_key_and_reason(self) -> None:
+        """InvalidCacheKeyError should store key and reason attributes."""
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        error = InvalidCacheKeyError(key="bad/key", reason="contains ..")
+        assert error.key == "bad/key"
+        assert error.reason == "contains .."
+
+    def test_invalid_cache_key_error_has_recovery_hint(self) -> None:
+        """InvalidCacheKeyError should provide a recovery_hint."""
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        error = InvalidCacheKeyError(key="bad/key", reason="contains ..")
+        assert error.recovery_hint is not None
+        assert isinstance(error.recovery_hint, str)
+        assert len(error.recovery_hint) > 0
+
+
+@pytest.mark.cache
+@pytest.mark.tra("Adapter.FileCache")
+@pytest.mark.tier(1)
+class TestPathTraversal:
+    """Tests for path traversal protection in FileCache."""
+
+    def test_get_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """get() should reject keys with .. that would escape cache_dir."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        with pytest.raises(InvalidCacheKeyError):
+            cache.get("../etc/passwd")
+
+    def test_put_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """put() should reject keys with .. that would escape cache_dir."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        with pytest.raises(InvalidCacheKeyError):
+            cache.put("../etc/passwd", source, CacheMetadata(etag='"x"'))
+
+    def test_invalidate_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """invalidate() should reject keys with .. that would escape cache_dir."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        with pytest.raises(InvalidCacheKeyError):
+            cache.invalidate("../etc/passwd")
+
+    def test_invalidate_prefix_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """invalidate_prefix() should reject prefixes with .. that would escape cache_dir."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        with pytest.raises(InvalidCacheKeyError):
+            cache.invalidate_prefix("../etc")
+
+    def test_file_path_rejects_absolute_key(self, tmp_path: Path) -> None:
+        """invalidate() should reject absolute paths starting with /."""
+        from datacachalog.adapters.cache import FileCache
+        from datacachalog.core.exceptions import InvalidCacheKeyError
+
+        cache = FileCache(cache_dir=tmp_path)
+
+        with pytest.raises(InvalidCacheKeyError):
+            cache.invalidate("/etc/passwd")
+
+    def test_valid_nested_key_accepted(self, tmp_path: Path) -> None:
+        """invalidate() should accept valid nested keys like 'logs/2024/file.txt'."""
+        from datacachalog.adapters.cache import FileCache
+
+        cache = FileCache(cache_dir=tmp_path)
+        source = tmp_path / "source.txt"
+        source.write_text("data")
+
+        # First put a file with a nested key
+        from datacachalog.core.models import CacheMetadata
+
+        cache.put("logs/2024/file.txt", source, CacheMetadata(etag='"x"'))
+
+        # Then invalidate it (should not raise)
+        cache.invalidate("logs/2024/file.txt")
+
+        # Verify it's gone
+        assert cache.get("logs/2024/file.txt") is None

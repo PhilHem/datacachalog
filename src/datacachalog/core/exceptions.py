@@ -113,6 +113,28 @@ class CacheError(DatacachalogError):
     pass
 
 
+class InvalidCacheKeyError(CacheError):
+    """Raised when a cache key contains path traversal or other invalid characters.
+
+    Attributes:
+        key: The invalid cache key.
+        reason: Description of why the key is invalid.
+    """
+
+    def __init__(self, key: str, reason: str) -> None:
+        self.key = key
+        self.reason = reason
+        super().__init__(f"Invalid cache key '{key}': {reason}")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest using a safe cache key without path traversal."""
+        return (
+            f"Use cache keys without '..' or absolute paths. "
+            f"Invalid key: '{self.key}' ({self.reason})"
+        )
+
+
 class CacheCorruptError(CacheError):
     """Raised when cache metadata is corrupt or unreadable.
 
@@ -230,3 +252,51 @@ class VersionNotFoundError(DatacachalogError):
     def recovery_hint(self) -> str:
         """Suggest viewing available versions."""
         return f"Try a later date or use catalog.versions('{self.name}') to see available versions"
+
+
+class UnsafeCatalogPathError(DatacachalogError):
+    """Raised when a catalog path is outside the allowed catalog root.
+
+    This prevents loading catalogs from arbitrary locations, ensuring
+    catalog files only come from trusted directories within the project.
+
+    Attributes:
+        path: The catalog file path that was rejected.
+        catalog_root: The allowed catalog root directory.
+    """
+
+    def __init__(self, path: Path, catalog_root: Path) -> None:
+        self.path = path
+        self.catalog_root = catalog_root
+        super().__init__(f"Catalog path {path} is outside allowed root {catalog_root}")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest placing catalog in the allowed root directory."""
+        return (
+            f"Place catalog file in {self.catalog_root} or a subdirectory, "
+            f"or update catalog_root to include {self.path}"
+        )
+
+
+class InvalidSourceURIError(ConfigurationError):
+    """Raised when a Dataset source URI uses an unsupported or invalid scheme.
+
+    Attributes:
+        uri: The invalid source URI.
+        reason: Description of why the URI is invalid.
+    """
+
+    def __init__(self, uri: str, reason: str) -> None:
+        self.uri = uri
+        self.reason = reason
+        super().__init__(f"Invalid source URI '{uri}': {reason}")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest using supported schemes: s3:// or local file paths."""
+        return (
+            f"Use supported schemes: s3://bucket/path or file:///local/path, "
+            f"or provide a local path without scheme. "
+            f"Invalid URI: '{self.uri}' ({self.reason})"
+        )

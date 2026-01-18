@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from datacachalog.core.exceptions import CacheCorruptError
+from datacachalog.core.exceptions import CacheCorruptError, InvalidCacheKeyError
 from datacachalog.core.models import CacheMetadata
 
 
@@ -30,6 +30,37 @@ class FileCache:
         """
         self.cache_dir = cache_dir
 
+    def _validate_cache_key(self, key: str) -> None:
+        """Validate a cache key for security and safety.
+
+        Rejects keys with:
+        - ".." (path traversal)
+        - Absolute paths starting with "/"
+        - Paths that would escape cache_dir
+
+        Args:
+            key: The cache key to validate.
+
+        Raises:
+            InvalidCacheKeyError: If the key is invalid.
+        """
+        if ".." in key:
+            raise InvalidCacheKeyError(
+                key=key, reason="contains '..' for path traversal"
+            )
+
+        if key.startswith("/"):
+            raise InvalidCacheKeyError(key=key, reason="absolute paths are not allowed")
+
+        # Verify resolved path stays within cache_dir
+        file_path = self._file_path(key)
+        try:
+            file_path.relative_to(self.cache_dir)
+        except ValueError:
+            raise InvalidCacheKeyError(
+                key=key, reason="resolved path escapes cache_dir"
+            ) from None
+
     def _file_path(self, key: str) -> Path:
         """Get the path for a cached file."""
         return self.cache_dir / key
@@ -48,8 +79,10 @@ class FileCache:
             Tuple of (file path, metadata) if cached, None otherwise.
 
         Raises:
+            InvalidCacheKeyError: If the key contains path traversal or is invalid.
             CacheCorruptError: If metadata file exists but is corrupt/unreadable.
         """
+        self._validate_cache_key(key)
         file_path = self._file_path(key)
         meta_path = self._meta_path(key)
 
@@ -87,7 +120,11 @@ class FileCache:
             key: Cache key for the file.
             path: Path to the source file to cache.
             metadata: Metadata to store alongside the cached file.
+
+        Raises:
+            InvalidCacheKeyError: If the key contains path traversal or is invalid.
         """
+        self._validate_cache_key(key)
         file_path = self._file_path(key)
         meta_path = self._meta_path(key)
 
@@ -114,7 +151,11 @@ class FileCache:
 
         Args:
             key: Cache key to invalidate.
+
+        Raises:
+            InvalidCacheKeyError: If the key contains path traversal or is invalid.
         """
+        self._validate_cache_key(key)
         file_path = self._file_path(key)
         meta_path = self._meta_path(key)
 
@@ -133,7 +174,11 @@ class FileCache:
 
         Returns:
             Number of entries removed.
+
+        Raises:
+            InvalidCacheKeyError: If the prefix contains path traversal or is invalid.
         """
+        self._validate_cache_key(prefix)
         prefix_dir = self.cache_dir / prefix
         if not prefix_dir.exists():
             return 0

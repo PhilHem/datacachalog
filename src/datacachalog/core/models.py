@@ -16,6 +16,58 @@ if TYPE_CHECKING:
     from datacachalog.core.ports import Reader
 
 
+def _validate_source_uri(source: str) -> None:
+    """Validate that source URI uses an allowed scheme.
+
+    Allowed schemes:
+    - s3:// - S3 storage
+    - file:// - Local filesystem
+    - No scheme - Local file path (relative or absolute)
+
+    Disallowed schemes (validation error):
+    - http://, https:// - Unsupported
+    - ftp:// - Unsupported
+    - Single-char schemes (Windows drive letters like C:)
+    - Paths containing ".." for path traversal protection
+
+    Args:
+        source: The source URI to validate.
+
+    Raises:
+        InvalidSourceURIError: If the URI uses an unsupported scheme or path traversal.
+    """
+    from datacachalog.core.exceptions import InvalidSourceURIError
+
+    # Check for path traversal attempts
+    if ".." in source:
+        raise InvalidSourceURIError(
+            uri=source,
+            reason="path traversal (..) not allowed",
+        )
+
+    # Check for scheme (colon followed by //)
+    if "://" in source:
+        scheme = source.split("://")[0]
+
+        # Allow s3 and file schemes
+        if scheme in ("s3", "file"):
+            return
+
+        # Reject known unsupported schemes
+        raise InvalidSourceURIError(
+            uri=source,
+            reason=f"{scheme} scheme not supported",
+        )
+
+    # Check for single-char scheme (Windows drive letter like C:)
+    if len(source) >= 2 and source[1] == ":" and source[0].isalpha():
+        # This is likely a Windows path (C:\...), which is fine
+        return
+
+    # No scheme = local path, which is allowed
+    # This covers both relative and absolute Unix paths
+
+
 @dataclass(frozen=True, slots=True)
 class Dataset:
     """A named dataset pointing to a remote storage location.
@@ -51,6 +103,7 @@ class Dataset:
             raise ValueError("Dataset name cannot be empty")
         if not self.source:
             raise ValueError("Dataset source cannot be empty")
+        _validate_source_uri(self.source)
 
     def with_cache_path(self, cache_path: Path) -> Self:
         """Return a new Dataset with the specified cache path.

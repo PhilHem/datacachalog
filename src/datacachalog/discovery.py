@@ -10,11 +10,27 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from datacachalog.core.exceptions import CatalogLoadError
+from datacachalog.core.exceptions import CatalogLoadError, UnsafeCatalogPathError
 
 
 if TYPE_CHECKING:
     from datacachalog.core.models import Dataset
+
+
+def _validate_path_containment(path: Path, catalog_root: Path) -> None:
+    """Validate that path is contained within catalog_root.
+
+    Args:
+        path: The catalog file path to validate.
+        catalog_root: The allowed catalog root directory.
+
+    Raises:
+        UnsafeCatalogPathError: If path is outside catalog_root.
+    """
+    try:
+        path.resolve().relative_to(catalog_root.resolve())
+    except ValueError as e:
+        raise UnsafeCatalogPathError(path=path, catalog_root=catalog_root) from e
 
 
 def discover_catalogs(root: Path) -> dict[str, Path]:
@@ -34,15 +50,25 @@ def discover_catalogs(root: Path) -> dict[str, Path]:
     return {p.stem: p for p in catalog_dir.glob("*.py") if not p.name.startswith("_")}
 
 
-def load_catalog(path: Path) -> tuple[list[Dataset], str | None]:
+def load_catalog(
+    path: Path, catalog_root: Path | None = None
+) -> tuple[list[Dataset], str | None]:
     """Load a catalog file and extract datasets and cache_dir.
 
     Args:
         path: Path to the catalog Python file.
+        catalog_root: Optional root directory to validate path containment.
+                      If provided, raises UnsafeCatalogPathError if path is outside this directory.
 
     Returns:
         Tuple of (datasets list, cache_dir or None).
+
+    Raises:
+        UnsafeCatalogPathError: If catalog_root is provided and path is outside it.
     """
+    if catalog_root is not None:
+        _validate_path_containment(path, catalog_root)
+
     # Generate a unique module name to avoid conflicts
     module_name = f"_datacachalog_catalog_{path.stem}_{id(path)}"
 

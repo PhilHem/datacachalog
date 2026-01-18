@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from datacachalog.core.exceptions import CatalogLoadError
+from datacachalog.core.exceptions import (
+    CatalogLoadError,
+    DatacachalogError,
+    UnsafeCatalogPathError,
+)
 from datacachalog.discovery import discover_catalogs, load_catalog
 
 
@@ -176,3 +180,117 @@ datasets = [Dataset(name="", source="s3://bucket/file.parquet")]
 
         assert exc_info.value.cause is not None
         assert isinstance(exc_info.value.cause, SyntaxError)
+
+
+@pytest.mark.core
+@pytest.mark.tra("Domain.Discovery.PathValidation")
+@pytest.mark.tier(1)
+class TestUnsafeCatalogPathError:
+    """Tests for UnsafeCatalogPathError exception."""
+
+    def test_unsafe_catalog_path_error_inherits_from_datacachalog_error(
+        self,
+    ) -> None:
+        """UnsafeCatalogPathError inherits from DatacachalogError."""
+        error = UnsafeCatalogPathError(
+            path=Path("/outside/file.py"), catalog_root=Path("/inside")
+        )
+        assert isinstance(error, DatacachalogError)
+
+    def test_unsafe_catalog_path_error_stores_path_and_catalog_root(
+        self, tmp_path: Path
+    ) -> None:
+        """UnsafeCatalogPathError stores path and catalog_root attributes."""
+        path = tmp_path / "file.py"
+        root = tmp_path / "root"
+        error = UnsafeCatalogPathError(path=path, catalog_root=root)
+
+        assert error.path == path
+        assert error.catalog_root == root
+
+    def test_unsafe_catalog_path_error_has_recovery_hint(self, tmp_path: Path) -> None:
+        """UnsafeCatalogPathError has a recovery_hint property."""
+        path = tmp_path / "outside" / "file.py"
+        root = tmp_path / "inside"
+        error = UnsafeCatalogPathError(path=path, catalog_root=root)
+
+        hint = error.recovery_hint
+        assert hint is not None
+        assert isinstance(hint, str)
+        assert len(hint) > 0
+
+
+@pytest.mark.core
+@pytest.mark.tra("Domain.Discovery.PathValidation")
+@pytest.mark.tier(1)
+class TestLoadCatalogPathValidation:
+    """Tests for path containment validation in load_catalog."""
+
+    def test_load_catalog_rejects_path_outside_catalog_root(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog() raises UnsafeCatalogPathError if path is outside catalog_root."""
+        catalog_file = tmp_path / "test_catalog.py"
+        catalog_file.write_text("datasets = []")
+
+        catalog_root = tmp_path / "allowed"
+        catalog_root.mkdir()
+
+        with pytest.raises(UnsafeCatalogPathError) as exc_info:
+            load_catalog(path=catalog_file, catalog_root=catalog_root)
+
+        assert exc_info.value.path == catalog_file
+        assert exc_info.value.catalog_root == catalog_root
+
+    def test_load_catalog_accepts_valid_path_in_catalog_root(
+        self, tmp_path: Path
+    ) -> None:
+        """load_catalog() accepts path contained within catalog_root."""
+        catalog_root = tmp_path / "allowed"
+        catalog_root.mkdir()
+
+        catalog_file = catalog_root / "test_catalog.py"
+        catalog_file.write_text("datasets = []")
+
+        datasets, cache_dir = load_catalog(path=catalog_file, catalog_root=catalog_root)
+
+        assert datasets == []
+        assert cache_dir is None
+
+    def test_load_catalog_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """load_catalog() rejects ../ traversal patterns."""
+        catalog_root = tmp_path / "allowed"
+        catalog_root.mkdir()
+
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        catalog_file = outside_dir / "test_catalog.py"
+        catalog_file.write_text("datasets = []")
+
+        # Attempt to use path traversal
+        traversal_path = catalog_root / ".." / "outside" / "test_catalog.py"
+
+        with pytest.raises(UnsafeCatalogPathError) as exc_info:
+            load_catalog(path=traversal_path, catalog_root=catalog_root)
+
+        assert exc_info.value.catalog_root == catalog_root
+
+    def test_load_catalog_rejects_symlink_escape(self, tmp_path: Path) -> None:
+        """load_catalog() rejects symlinks pointing outside catalog_root."""
+        catalog_root = tmp_path / "allowed"
+        catalog_root.mkdir()
+
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        outside_file = outside_dir / "evil.py"
+        outside_file.write_text("datasets = []")
+
+        # Create symlink inside catalog_root pointing outside
+        symlink = catalog_root / "link.py"
+        symlink.symlink_to(outside_file)
+
+        with pytest.raises(UnsafeCatalogPathError) as exc_info:
+            load_catalog(path=symlink, catalog_root=catalog_root)
+
+        assert exc_info.value.path == symlink
+        assert exc_info.value.catalog_root == catalog_root

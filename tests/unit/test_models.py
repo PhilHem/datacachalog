@@ -575,3 +575,104 @@ class TestFindVersionAt:
         result = find_version_at(versions, as_of=datetime(2024, 12, 20))
 
         assert result is None
+
+
+@pytest.mark.tra("Domain.Invariant.SourceURI")
+@pytest.mark.tier(0)
+class TestInvalidSourceURIError:
+    """Tests for InvalidSourceURIError exception."""
+
+    @pytest.mark.core
+    def test_invalid_source_uri_error_inherits_from_configuration_error(self) -> None:
+        """InvalidSourceURIError inherits from ConfigurationError."""
+        from datacachalog.core.exceptions import (
+            ConfigurationError,
+            InvalidSourceURIError,
+        )
+
+        error = InvalidSourceURIError(
+            uri="http://invalid.com/file", reason="http scheme not allowed"
+        )
+        assert isinstance(error, ConfigurationError)
+
+    @pytest.mark.core
+    def test_invalid_source_uri_error_stores_uri_and_reason(self) -> None:
+        """InvalidSourceURIError stores uri and reason attributes."""
+        from datacachalog.core.exceptions import InvalidSourceURIError
+
+        uri = "ftp://invalid.com/file"
+        reason = "ftp scheme not supported"
+        error = InvalidSourceURIError(uri=uri, reason=reason)
+
+        assert error.uri == uri
+        assert error.reason == reason
+
+    @pytest.mark.core
+    def test_invalid_source_uri_error_has_recovery_hint(self) -> None:
+        """InvalidSourceURIError provides recovery_hint property."""
+        from datacachalog.core.exceptions import InvalidSourceURIError
+
+        error = InvalidSourceURIError(
+            uri="ftp://data.com/file.parquet", reason="ftp scheme not supported"
+        )
+
+        assert error.recovery_hint is not None
+        assert (
+            "s3://" in error.recovery_hint
+            or "file://" in error.recovery_hint
+            or "local path" in error.recovery_hint.lower()
+        )
+
+
+@pytest.mark.tra("Domain.Invariant.SourceURI")
+@pytest.mark.tier(0)
+class TestDatasetSourceValidation:
+    """Tests for Dataset source URI validation."""
+
+    @pytest.mark.core
+    def test_dataset_rejects_http_scheme(self) -> None:
+        """Dataset raises InvalidSourceURIError for http:// URIs."""
+        from datacachalog.core.exceptions import InvalidSourceURIError
+
+        with pytest.raises(InvalidSourceURIError):
+            Dataset(name="test", source="http://example.com/file.parquet")
+
+    @pytest.mark.core
+    def test_dataset_rejects_ftp_scheme(self) -> None:
+        """Dataset raises InvalidSourceURIError for ftp:// URIs."""
+        from datacachalog.core.exceptions import InvalidSourceURIError
+
+        with pytest.raises(InvalidSourceURIError):
+            Dataset(name="test", source="ftp://example.com/file.parquet")
+
+    @pytest.mark.core
+    def test_dataset_rejects_filesystem_path_traversal(self) -> None:
+        """Dataset raises InvalidSourceURIError for paths with '..' traversal."""
+        from datacachalog.core.exceptions import InvalidSourceURIError
+
+        with pytest.raises(InvalidSourceURIError):
+            Dataset(name="test", source="../../../etc/passwd")
+
+    @pytest.mark.core
+    def test_dataset_accepts_s3_uri(self) -> None:
+        """Dataset accepts s3:// URIs."""
+        dataset = Dataset(name="test", source="s3://bucket/path/file.parquet")
+        assert dataset.source == "s3://bucket/path/file.parquet"
+
+    @pytest.mark.core
+    def test_dataset_accepts_file_uri(self) -> None:
+        """Dataset accepts file:// URIs."""
+        dataset = Dataset(name="test", source="file:///absolute/path/file.parquet")
+        assert dataset.source == "file:///absolute/path/file.parquet"
+
+    @pytest.mark.core
+    def test_dataset_accepts_relative_path(self) -> None:
+        """Dataset accepts relative filesystem paths."""
+        dataset = Dataset(name="test", source="data/file.parquet")
+        assert dataset.source == "data/file.parquet"
+
+    @pytest.mark.core
+    def test_dataset_accepts_windows_path(self) -> None:
+        """Dataset accepts Windows paths like C:/data/file.parquet."""
+        dataset = Dataset(name="test", source="C:/data/file.parquet")
+        assert dataset.source == "C:/data/file.parquet"
