@@ -7,6 +7,8 @@ import pytest
 class TestReadersPackageExports:
     """Verify all readers are exported from the package."""
 
+    @pytest.mark.tier(0)
+    @pytest.mark.tra("Adapter.Readers.ExportsFromPackage")
     def test_all_readers_exported_from_readers_package(self) -> None:
         """All 4 reader classes should be importable from adapters.readers."""
         from datacachalog.adapters.readers import (
@@ -28,6 +30,8 @@ class TestReadersPackageExports:
         assert hasattr(PolarsCsvReader, "read")
         assert hasattr(PolarsParquetReader, "read")
 
+    @pytest.mark.tier(0)
+    @pytest.mark.tra("Adapter.Readers.DunderAllCorrect")
     def test_dunder_all_contains_all_readers(self) -> None:
         """__all__ should list all 4 reader classes."""
         from datacachalog.adapters import readers
