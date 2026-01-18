@@ -309,6 +309,8 @@ class TestFetch:
 
 
 @pytest.mark.core
+@pytest.mark.tra("Catalog.DatasetsProperty")
+@pytest.mark.tier(1)
 class TestDatasetsProperty:
     """Tests for the catalog.datasets property."""
 

@@ -261,7 +261,6 @@ class TestFetchGlob:
         self, tmp_path: Path
     ) -> None:
         """fetch(dry_run=True) should check staleness but skip download and cache update."""
-        import time
 
         from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
@@ -294,8 +293,7 @@ class TestFetchGlob:
         cached_before = cache.get("customers")
         assert cached_before is not None
 
-        # Modify remote file (changes ETag/mtime)
-        time.sleep(0.1)  # Ensure mtime changes
+        # Modify remote file (changes ETag via content hash)
         remote_file.write_text("id,name\n1,Alice\n2,Bob\n")
 
         # Dry-run fetch should check staleness but not download
