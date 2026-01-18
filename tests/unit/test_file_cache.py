@@ -1,6 +1,6 @@
 """Unit tests for FileCache adapter."""
 
-from collections.abc import Generator
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,18 +9,16 @@ import pytest
 from datacachalog.core.models import CacheMetadata
 
 
-@pytest.fixture
-def file_cache(tmp_path: Path) -> Generator:
-    """Provide a FileCache instance with explicit cleanup for test isolation."""
-    from datacachalog.adapters.cache import FileCache
-
-    cache = FileCache(cache_dir=tmp_path / "cache")
-    yield cache
-    # Explicit cleanup - remove all cached files
-    import shutil
-
-    if (tmp_path / "cache").exists():
-        shutil.rmtree(tmp_path / "cache")
+@pytest.fixture(autouse=True)
+def cleanup_cache(tmp_path: Path) -> None:
+    """Autouse fixture ensuring cache cleanup after each test for isolation."""
+    yield
+    # Explicit cleanup after test - remove all files in tmp_path
+    for item in tmp_path.iterdir():
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
 
 
 @pytest.mark.cache
@@ -284,8 +282,6 @@ class TestCacheSize:
 
     def test_cache_size_per_dataset(self, tmp_path: Path) -> None:
         """Catalog can calculate cache size per dataset."""
-        import shutil
-
         from datacachalog import Dataset
         from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
@@ -307,16 +303,11 @@ class TestCacheSize:
         )
         catalog = Catalog(datasets=[dataset], storage=storage, cache=cache)
 
-        try:
-            # Fetch to populate cache
-            catalog.fetch("customers")
+        # Fetch to populate cache (cleanup handled by autouse fixture)
+        catalog.fetch("customers")
 
-            size = catalog.cache_size("customers")
-            assert size > 0
-        finally:
-            # Explicit cleanup for test isolation
-            if cache_dir.exists():
-                shutil.rmtree(cache_dir)
+        size = catalog.cache_size("customers")
+        assert size > 0
 
     def test_cache_size_includes_metadata_files(self, tmp_path: Path) -> None:
         """Cache size includes both data files and .meta.json files."""
