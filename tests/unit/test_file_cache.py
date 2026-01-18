@@ -11,15 +11,20 @@ from datacachalog.core.models import CacheMetadata
 
 
 @pytest.fixture(autouse=True)
-def cleanup_cache(tmp_path: Path) -> None:
-    """Autouse fixture ensuring cache cleanup after each test for isolation."""
+def clear_cache_after_test(tmp_path: Path) -> None:
+    """Autouse fixture that clears cache after each test for isolation.
+
+    Uses explicit cache clearing pattern to ensure no state leaks between tests.
+    Each test gets a fresh tmp_path, and this fixture ensures cleanup.
+    """
     yield
-    # Explicit cleanup after test - remove all files in tmp_path
-    for item in tmp_path.iterdir():
-        if item.is_dir():
-            shutil.rmtree(item)
-        else:
-            item.unlink()
+    # Clear cache state explicitly after test
+    if tmp_path.exists():
+        for item in tmp_path.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
 
 
 @pytest.mark.cache
