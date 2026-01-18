@@ -146,6 +146,7 @@ class TestVersions:
 
 
 @pytest.mark.core
+@pytest.mark.tra("UseCase.FetchVersion")
 @pytest.mark.tier(2)
 class TestFetchVersion:
     """Tests for fetch() with version_id parameter."""
