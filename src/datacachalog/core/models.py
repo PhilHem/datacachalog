@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Any, Self
+
+
+if TYPE_CHECKING:
+    from datacachalog.core.ports import Reader
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +26,8 @@ class Dataset:
         description: Optional human-readable description of the dataset.
         cache_path: Optional explicit local path for caching. If not provided,
             the catalog will derive a path from the source URI and cache_dir.
+        reader: Optional reader to load cached files into typed objects (e.g.,
+            pandas DataFrame). If not provided, fetch() returns Path only.
 
     Example:
         >>> customers = Dataset(
@@ -37,6 +43,7 @@ class Dataset:
     source: str
     description: str = ""
     cache_path: Path | None = None
+    reader: Reader[Any] | None = None
 
     def __post_init__(self) -> None:
         """Validate dataset fields after initialization."""
@@ -59,6 +66,7 @@ class Dataset:
             source=self.source,
             description=self.description,
             cache_path=cache_path,
+            reader=self.reader,
         )
 
     def with_resolved_paths(self, root: Path) -> Self:
@@ -82,6 +90,7 @@ class Dataset:
             source=self.source,
             description=self.description,
             cache_path=resolved,
+            reader=self.reader,
         )
 
 

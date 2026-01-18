@@ -7,7 +7,7 @@ depends only on these protocols, never on concrete implementations.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 
 if TYPE_CHECKING:
@@ -17,7 +17,47 @@ if TYPE_CHECKING:
 
     from datacachalog.core.models import CacheMetadata, FileMetadata, ObjectVersion
 
+# TypeVar for Reader protocol generic return type (covariant for protocols)
+T_co = TypeVar("T_co", covariant=True)
+
 ProgressCallback = Callable[[int, int], None]
+
+
+@runtime_checkable
+class Reader(Protocol[T_co]):
+    """Protocol for loading cached files into typed objects.
+
+    This protocol defines the contract for readers that transform
+    cached files (e.g., Parquet, CSV) into typed objects like
+    pandas DataFrames, polars DataFrames, or geopandas GeoDataFrames.
+
+    The generic type parameter T_co represents the return type of read().
+    Implementations can be specific (e.g., Reader[pd.DataFrame]) or
+    generic (e.g., Reader[Any] for dynamic dispatch).
+
+    Example:
+        >>> class ParquetReader:
+        ...     def read(self, path: Path) -> pd.DataFrame:
+        ...         return pd.read_parquet(path)
+        ...
+        >>> reader: Reader[pd.DataFrame] = ParquetReader()
+        >>> df = reader.read(Path("data.parquet"))
+    """
+
+    def read(self, path: Path) -> T_co:
+        """Load a file from the given path.
+
+        Args:
+            path: Path to the cached file to read.
+
+        Returns:
+            The loaded data in the appropriate type T.
+
+        Raises:
+            Any exception appropriate for the file format or reader
+            implementation (e.g., FileNotFoundError, ParserError).
+        """
+        ...
 
 
 @runtime_checkable

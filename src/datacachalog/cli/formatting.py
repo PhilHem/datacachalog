@@ -91,7 +91,6 @@ def _get_cache_state(catalog: Catalog, dataset_name: str) -> str:
     cached = catalog._cache.get(dataset_name)
     if cached is None:
         return "missing"
-    elif catalog.is_stale(dataset_name):
+    if catalog.is_stale(dataset_name):
         return "stale"
-    else:
-        return "fresh"
+    return "fresh"

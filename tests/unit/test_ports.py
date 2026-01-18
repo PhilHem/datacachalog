@@ -45,6 +45,61 @@ def test_storage_port_has_head_method():
 
 
 @pytest.mark.core
+@pytest.mark.tra("Port.Reader")
+@pytest.mark.tier(0)
+class TestReaderProtocol:
+    """Tests for Reader protocol definition."""
+
+    def test_reader_protocol_exists(self) -> None:
+        """Reader should be importable from core.ports."""
+        from datacachalog.core.ports import Reader
+
+        assert Reader is not None
+
+    def test_reader_protocol_is_runtime_checkable(self) -> None:
+        """Reader should support isinstance checks."""
+        from pathlib import Path
+
+        from datacachalog.core.ports import Reader
+
+        class DummyReader:
+            def read(self, path: Path) -> str:
+                return "data"
+
+        assert isinstance(DummyReader(), Reader)
+
+    def test_class_satisfies_reader_protocol(self) -> None:
+        """A class with read() method should satisfy Reader protocol."""
+        from pathlib import Path
+
+        from datacachalog.core.ports import Reader
+
+        class StringReader:
+            def read(self, path: Path) -> str:
+                return path.read_text()
+
+        reader: Reader[str] = StringReader()
+        assert isinstance(reader, Reader)
+
+    def test_reader_protocol_is_generic(self) -> None:
+        """Reader[T] should accept type parameter."""
+        from pathlib import Path
+        from typing import Any
+
+        from datacachalog.core.ports import Reader
+
+        class IntReader:
+            def read(self, path: Path) -> int:
+                return 42
+
+        # Should be assignable to Reader[int] and Reader[Any]
+        reader_int: Reader[int] = IntReader()
+        reader_any: Reader[Any] = IntReader()
+        assert isinstance(reader_int, Reader)
+        assert isinstance(reader_any, Reader)
+
+
+@pytest.mark.core
 @pytest.mark.tra("Port.CachePort")
 @pytest.mark.tier(0)
 def test_cache_port_has_get_method():

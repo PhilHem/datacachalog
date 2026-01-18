@@ -167,6 +167,7 @@ ignore = [
 # Allow fix for all enabled rules
 fixable = ["ALL"]
 unfixable = []
+extend-select = ["ARG", "B", "C901", "ERA001", "FURB", "I001", "I002", "PLR0913", "PT", "RET", "RUF", "S", "TCH", "TID252", "UP006", "UP007", "UP035"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["datacachalog"]
@@ -176,6 +177,11 @@ lines-after-imports = 2
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "ARG",    # Unused arguments OK in tests (fixtures)
+    "S101",   # Asserts are the primary mechanism for test assertions
+    "S108",   # Hardcoded /tmp paths OK in tests
+    "TC001",  # Tests import at runtime for isolation
+    "TC003",  # Tests import at runtime for isolation
+    "PT011",  # Broad pytest.raises acceptable for simple ValueError cases
 ]
 "tests/conftest.py" = [
     "TC001",  # Runtime imports needed for fixtures
@@ -189,8 +195,19 @@ lines-after-imports = 2
 ]
 "src/datacachalog/cli/*.py" = [
     "B008",   # typer.Option/Argument are designed for function defaults
+    "C901",   # CLI commands have inherent complexity
+    "PLR0913",  # CLI commands need many arguments for options
+    "S101",   # Asserts used for type narrowing after validation
+]
+"src/datacachalog/adapters/storage/filesystem.py" = [
+    "S324",   # MD5 used intentionally for S3 ETag compatibility
+]
+"src/datacachalog/core/services.py" = [
+    "S101",   # Assert used for type narrowing with futures
 ]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 [tool.ruff.format]
 # Like Black
 quote-style = "double"

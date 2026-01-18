@@ -145,6 +145,26 @@ class ConfigurationError(DatacachalogError):
     pass
 
 
+class ReaderNotConfiguredError(ConfigurationError):
+    """Raised when a reader operation is attempted on a dataset without a reader.
+
+    Attributes:
+        dataset_name: The name of the dataset missing a reader.
+    """
+
+    def __init__(self, dataset_name: str) -> None:
+        self.dataset_name = dataset_name
+        super().__init__(f"Dataset '{dataset_name}' has no reader configured")
+
+    @property
+    def recovery_hint(self) -> str:
+        """Suggest configuring a reader for the dataset."""
+        return (
+            f"Configure a reader for dataset '{self.dataset_name}': "
+            f"Dataset(name='{self.dataset_name}', ..., reader=MyReader())"
+        )
+
+
 class EmptyGlobMatchError(DatacachalogError):
     """Raised when a glob pattern matches no files.
 

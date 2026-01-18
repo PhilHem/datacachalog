@@ -233,6 +233,46 @@ class TestConfigurationError:
 @pytest.mark.core
 @pytest.mark.tra("Domain.Exceptions")
 @pytest.mark.tier(0)
+class TestReaderNotConfiguredError:
+    """Tests for ReaderNotConfiguredError."""
+
+    def test_is_configuration_error_subclass(self) -> None:
+        """ReaderNotConfiguredError should inherit from ConfigurationError."""
+        from datacachalog.core.exceptions import (
+            ConfigurationError,
+            ReaderNotConfiguredError,
+        )
+
+        assert issubclass(ReaderNotConfiguredError, ConfigurationError)
+
+    def test_stores_dataset_name(self) -> None:
+        """ReaderNotConfiguredError should store the dataset name."""
+        from datacachalog.core.exceptions import ReaderNotConfiguredError
+
+        err = ReaderNotConfiguredError(dataset_name="customers")
+        assert err.dataset_name == "customers"
+
+    def test_message_includes_dataset_name(self) -> None:
+        """Exception message should include the dataset name."""
+        from datacachalog.core.exceptions import ReaderNotConfiguredError
+
+        err = ReaderNotConfiguredError(dataset_name="customers")
+        assert "customers" in str(err)
+
+    def test_recovery_hint_suggests_configuring_reader(self) -> None:
+        """recovery_hint should suggest configuring a reader."""
+        from datacachalog.core.exceptions import ReaderNotConfiguredError
+
+        err = ReaderNotConfiguredError(dataset_name="customers")
+        hint = err.recovery_hint
+        assert hint is not None
+        assert "reader" in hint.lower()
+        assert "customers" in hint
+
+
+@pytest.mark.core
+@pytest.mark.tra("Domain.Exceptions")
+@pytest.mark.tier(0)
 class TestCatalogLoadError:
     """Tests for CatalogLoadError."""
 

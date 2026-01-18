@@ -81,6 +81,80 @@ class TestDataset:
 
 @pytest.mark.tra("Domain.Dataset")
 @pytest.mark.tier(0)
+class TestDatasetReader:
+    """Tests for Dataset.reader field."""
+
+    @pytest.mark.core
+    def test_dataset_reader_defaults_to_none(self) -> None:
+        """Dataset.reader defaults to None when not provided."""
+        dataset = Dataset(name="test", source="s3://bucket/file.parquet")
+
+        assert dataset.reader is None
+
+    @pytest.mark.core
+    def test_dataset_with_reader(self) -> None:
+        """Dataset can be created with a reader."""
+        from datacachalog.core.ports import Reader
+
+        class StringReader:
+            def read(self, path: Path) -> str:
+                return "data"
+
+        reader: Reader[str] = StringReader()
+        dataset = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            reader=reader,
+        )
+
+        assert dataset.reader is reader
+
+    @pytest.mark.core
+    def test_dataset_reader_preserved_in_with_cache_path(self) -> None:
+        """with_cache_path preserves the reader field."""
+        from datacachalog.core.ports import Reader
+
+        class StringReader:
+            def read(self, path: Path) -> str:
+                return "data"
+
+        reader: Reader[str] = StringReader()
+        original = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            reader=reader,
+        )
+
+        updated = original.with_cache_path(Path("/cache/file.parquet"))
+
+        assert updated.reader is reader
+        assert updated.cache_path == Path("/cache/file.parquet")
+
+    @pytest.mark.core
+    def test_dataset_reader_preserved_in_with_resolved_paths(self) -> None:
+        """with_resolved_paths preserves the reader field."""
+        from datacachalog.core.ports import Reader
+
+        class StringReader:
+            def read(self, path: Path) -> str:
+                return "data"
+
+        reader: Reader[str] = StringReader()
+        original = Dataset(
+            name="test",
+            source="s3://bucket/file.parquet",
+            cache_path=Path("data/file.parquet"),
+            reader=reader,
+        )
+
+        resolved = original.with_resolved_paths(Path("/project"))
+
+        assert resolved.reader is reader
+        assert resolved.cache_path == Path("/project/data/file.parquet")
+
+
+@pytest.mark.tra("Domain.Dataset")
+@pytest.mark.tier(0)
 class TestDatasetWithResolvedPaths:
     """Tests for Dataset.with_resolved_paths()."""
 
