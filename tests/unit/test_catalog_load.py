@@ -25,10 +25,18 @@ def storage() -> FilesystemStorage:
 
 
 @pytest.fixture
-def cache(tmp_path: Path) -> FileCache:
-    """Isolated file cache using tmp_path for test isolation."""
+def cache(tmp_path: Path):
+    """Isolated file cache using tmp_path for test isolation.
+
+    Each test gets a fresh cache directory via tmp_path.
+    The cache is yielded and explicitly cleared after use.
+    """
     cache_dir = tmp_path / "cache"
-    return FileCache(cache_dir=cache_dir)
+    file_cache = FileCache(cache_dir=cache_dir)
+    yield file_cache
+    # Explicit cleanup - clear any cached entries
+    for key in file_cache.list_all_keys():
+        file_cache.invalidate(key)
 
 
 class TrackingProgressReporter:
