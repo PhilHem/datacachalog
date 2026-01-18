@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from datacachalog.adapters.cache import FileCache
 from datacachalog.core.models import CacheMetadata
 
 
@@ -29,14 +30,12 @@ class TestGet:
 
     def test_get_nonexistent_key_returns_none(self, tmp_path: Path) -> None:
         """get() should return None for keys not in cache."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         assert cache.get("missing") is None
 
     def test_get_returns_none_when_metadata_missing(self, tmp_path: Path) -> None:
         """get() should return None when file exists but metadata is missing."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         # Create orphan file without metadata sidecar
@@ -52,7 +51,6 @@ class TestPut:
 
     def test_put_then_get_returns_path_and_metadata(self, tmp_path: Path) -> None:
         """put() should store file and metadata, get() should retrieve them."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -69,7 +67,6 @@ class TestPut:
 
     def test_put_preserves_all_metadata_fields(self, tmp_path: Path) -> None:
         """put() should preserve all CacheMetadata fields in the sidecar."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -93,7 +90,6 @@ class TestPut:
 
     def test_put_creates_cache_directory(self, tmp_path: Path) -> None:
         """put() should create cache directory if it doesn't exist."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path / "nested" / "cache")
         source = tmp_path / "source.txt"
@@ -112,7 +108,6 @@ class TestInvalidate:
 
     def test_invalidate_removes_cached_file_and_metadata(self, tmp_path: Path) -> None:
         """invalidate() should remove both cached file and metadata sidecar."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -127,7 +122,6 @@ class TestInvalidate:
 
     def test_invalidate_nonexistent_key_does_not_raise(self, tmp_path: Path) -> None:
         """invalidate() should not raise for keys not in cache."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         cache.invalidate("never_existed")  # Should not raise
@@ -141,7 +135,6 @@ class TestInvalidatePrefix:
 
     def test_invalidate_prefix_removes_matching_files(self, tmp_path: Path) -> None:
         """invalidate_prefix() should remove all files with matching prefix."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -160,7 +153,6 @@ class TestInvalidatePrefix:
 
     def test_invalidate_prefix_returns_count(self, tmp_path: Path) -> None:
         """invalidate_prefix() should return count of deleted entries."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -175,7 +167,6 @@ class TestInvalidatePrefix:
 
     def test_invalidate_prefix_preserves_other_files(self, tmp_path: Path) -> None:
         """invalidate_prefix() should not remove files with different prefix."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -191,7 +182,6 @@ class TestInvalidatePrefix:
 
     def test_invalidate_prefix_handles_no_matches(self, tmp_path: Path) -> None:
         """invalidate_prefix() should return 0 when no files match."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
 
@@ -201,7 +191,6 @@ class TestInvalidatePrefix:
 
     def test_invalidate_prefix_handles_nested_directories(self, tmp_path: Path) -> None:
         """invalidate_prefix() should remove files in nested directories."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -225,7 +214,6 @@ class TestProtocolConformance:
 
     def test_file_cache_satisfies_cache_port_protocol(self, tmp_path: Path) -> None:
         """FileCache should satisfy CachePort protocol."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.ports import CachePort
 
         cache = FileCache(cache_dir=tmp_path)
@@ -240,7 +228,6 @@ class TestCorruptMetadata:
 
     def test_get_raises_cache_corrupt_for_invalid_json(self, tmp_path: Path) -> None:
         """get() should raise CacheCorruptError when metadata is invalid JSON."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import CacheCorruptError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -264,7 +251,6 @@ class TestCacheSize:
 
     def test_cache_size_calculation(self, tmp_path: Path) -> None:
         """FileCache can calculate total cache size."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source1 = tmp_path / "source1.txt"
@@ -283,7 +269,6 @@ class TestCacheSize:
     def test_cache_size_per_dataset(self, tmp_path: Path) -> None:
         """Catalog can calculate cache size per dataset."""
         from datacachalog import Dataset
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
         from datacachalog.core.services import Catalog
 
@@ -311,7 +296,6 @@ class TestCacheSize:
 
     def test_cache_size_includes_metadata_files(self, tmp_path: Path) -> None:
         """Cache size includes both data files and .meta.json files."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -327,7 +311,6 @@ class TestCacheSize:
 
     def test_cache_statistics_shows_total_size(self, tmp_path: Path) -> None:
         """Cache statistics method returns total size and file count."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source1 = tmp_path / "source1.txt"
@@ -353,7 +336,6 @@ class TestListAllKeys:
         self, tmp_path: Path
     ) -> None:
         """list_all_keys() should return empty list when cache_dir is empty or doesn't exist."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         keys = cache.list_all_keys()
@@ -361,7 +343,6 @@ class TestListAllKeys:
 
     def test_list_all_keys_returns_all_cache_keys(self, tmp_path: Path) -> None:
         """list_all_keys() should return all keys from .meta.json files in cache."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -379,7 +360,6 @@ class TestListAllKeys:
 
     def test_list_all_keys_handles_nested_directories(self, tmp_path: Path) -> None:
         """list_all_keys() should return keys from nested directory structures."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -397,7 +377,6 @@ class TestListAllKeys:
 
     def test_list_all_keys_excludes_orphaned_files(self, tmp_path: Path) -> None:
         """list_all_keys() should only return keys that have both data file and metadata file."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -424,7 +403,6 @@ class TestListAllKeys:
         self, tmp_path: Path
     ) -> None:
         """list_all_keys() should return keys as relative paths from cache_dir root."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
@@ -480,7 +458,6 @@ class TestPathTraversal:
 
     def test_get_rejects_path_traversal(self, tmp_path: Path) -> None:
         """get() should reject keys with .. that would escape cache_dir."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import InvalidCacheKeyError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -490,7 +467,6 @@ class TestPathTraversal:
 
     def test_put_rejects_path_traversal(self, tmp_path: Path) -> None:
         """put() should reject keys with .. that would escape cache_dir."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import InvalidCacheKeyError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -502,7 +478,6 @@ class TestPathTraversal:
 
     def test_invalidate_rejects_path_traversal(self, tmp_path: Path) -> None:
         """invalidate() should reject keys with .. that would escape cache_dir."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import InvalidCacheKeyError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -512,7 +487,6 @@ class TestPathTraversal:
 
     def test_invalidate_prefix_rejects_path_traversal(self, tmp_path: Path) -> None:
         """invalidate_prefix() should reject prefixes with .. that would escape cache_dir."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import InvalidCacheKeyError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -522,7 +496,6 @@ class TestPathTraversal:
 
     def test_file_path_rejects_absolute_key(self, tmp_path: Path) -> None:
         """invalidate() should reject absolute paths starting with /."""
-        from datacachalog.adapters.cache import FileCache
         from datacachalog.core.exceptions import InvalidCacheKeyError
 
         cache = FileCache(cache_dir=tmp_path)
@@ -532,7 +505,6 @@ class TestPathTraversal:
 
     def test_valid_nested_key_accepted(self, tmp_path: Path) -> None:
         """invalidate() should accept valid nested keys like 'logs/2024/file.txt'."""
-        from datacachalog.adapters.cache import FileCache
 
         cache = FileCache(cache_dir=tmp_path)
         source = tmp_path / "source.txt"
