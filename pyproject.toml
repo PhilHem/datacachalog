@@ -205,6 +205,23 @@ lines-after-imports = 2
 "src/datacachalog/core/services.py" = [
     "S101",   # Assert used for type narrowing with futures
 ]
+"examples/**/*.py" = [
+    "ERA001", # Commented code OK in examples for documentation
+    "S101",   # Asserts OK in examples for demonstration
+]
+"init/**/*.py" = [
+    "ERA001", # Commented code OK in template files
+]
+"tests/unit/test_filesystem_storage.py" = [
+    "S324",   # MD5 used in tests to verify S3 ETag compatibility
+]
+"tests/unit/test_catalog.py" = [
+    "ERA001", # Commented code in tests for debugging
+    "C901",   # Complex test function acceptable
+]
+"tests/unit/test_cli.py" = [
+    "ERA001", # Commented code in tests for debugging
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

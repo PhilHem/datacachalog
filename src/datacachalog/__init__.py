@@ -29,6 +29,7 @@ from datacachalog.core.exceptions import (
     DatacachalogError,
     DatasetNotFoundError,
     EmptyGlobMatchError,
+    ReaderNotConfiguredError,
     StorageAccessError,
     StorageError,
     StorageNotFoundError,
@@ -40,6 +41,7 @@ from datacachalog.core.ports import (
     NullProgressReporter,
     ProgressCallback,
     ProgressReporter,
+    Reader,
     StoragePort,
 )
 from datacachalog.core.services import Catalog
@@ -47,7 +49,7 @@ from datacachalog.discovery import discover_catalogs, load_catalog
 from datacachalog.progress import RichProgressReporter
 
 
-__version__ = "0.2.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "CacheCorruptError",
@@ -68,6 +70,8 @@ __all__ = [
     "ObjectVersion",
     "ProgressCallback",
     "ProgressReporter",
+    "Reader",
+    "ReaderNotConfiguredError",
     "RichProgressReporter",
     "RouterStorage",
     "S3Storage",
