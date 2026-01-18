@@ -203,7 +203,12 @@ lines-after-imports = 2
     "S324",   # MD5 used intentionally for S3 ETag compatibility
 ]
 "src/datacachalog/core/services.py" = [
-    "S101",   # Assert used for type narrowing with futures
+    "S101",    # Assert used for type narrowing with futures
+    "TC003",   # datetime used for annotations but code receives datetime objects
+    "PLR0913", # Catalog has 6 params (datasets, storage, cache, cache_dir, executor, reader)
+]
+"src/datacachalog/core/fetch_operations.py" = [
+    "PLR0913", # Extracted fetch functions need many params for dependency injection
 ]
 "examples/**/*.py" = [
     "ERA001", # Commented code OK in examples for documentation

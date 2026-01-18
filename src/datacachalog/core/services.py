@@ -1,19 +1,16 @@
 """Core domain services for datacachalog."""
 
-import re
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from datacachalog.core.exceptions import (
     ConfigurationError,
     DatasetNotFoundError,
-    EmptyGlobMatchError,
 )
-from datacachalog.core.glob_utils import (
-    derive_cache_key,
-    is_glob_pattern,
-    split_glob_pattern,
-)
+from datacachalog.core.glob_utils import is_glob_pattern
 from datacachalog.core.models import (
     CacheMetadata,
     Dataset,
@@ -29,6 +26,10 @@ from datacachalog.core.ports import (
 )
 
 
+if TYPE_CHECKING:
+    from datacachalog.core.ports import Reader
+
+
 class Catalog:
     """Orchestrates dataset fetching with caching and staleness detection."""
 
@@ -39,12 +40,14 @@ class Catalog:
         cache: CachePort,
         cache_dir: Path | None = None,
         executor: ExecutorPort | None = None,
+        reader: Reader[object] | None = None,
     ) -> None:
         self._datasets = {d.name: d for d in datasets}
         self._storage = storage
         self._cache = cache
         self._cache_dir = cache_dir
         self._executor = executor
+        self._reader = reader
 
     @classmethod
     def from_directory(
@@ -52,7 +55,7 @@ class Catalog:
         datasets: list[Dataset],
         directory: Path | None = None,
         cache_dir: Path | str = "data",
-    ) -> "Catalog":
+    ) -> Catalog:
         """Create Catalog with auto-discovered project root and default adapters.
 
         Args:
@@ -137,40 +140,10 @@ class Catalog:
     def _resolve_version_cache_key(
         self, dataset: Dataset, last_modified: datetime
     ) -> str:
-        """Generate a date-based cache key for a versioned file.
+        """Generate a date-based cache key for a versioned file."""
+        from datacachalog.core.path_utils import resolve_version_cache_key
 
-        Format: YYYY-MM-DDTHHMMSS.ext where ext comes from the original filename.
-
-        Args:
-            dataset: The dataset being fetched.
-            last_modified: The version's last_modified timestamp.
-
-        Returns:
-            Cache key in format YYYY-MM-DDTHHMMSS.ext
-        """
-        # Extract extension from source filename
-        source = dataset.source
-        if "://" in source:
-            path_part = source.split("://", 1)[1]
-            filename = path_part.split("/", 1)[1] if "/" in path_part else path_part
-        else:
-            filename = Path(source).name
-
-        # Get extension (including the dot)
-        ext = Path(filename).suffix
-
-        # Format datetime as YYYY-MM-DDTHHMMSS (no colons, no timezone)
-        # Ensure UTC timezone for consistent formatting
-        from datetime import UTC
-
-        if last_modified.tzinfo is None:
-            dt = last_modified.replace(tzinfo=UTC)
-        else:
-            dt = last_modified.astimezone(UTC)
-
-        date_str = dt.strftime("%Y-%m-%dT%H%M%S")
-
-        return f"{date_str}{ext}"
+        return resolve_version_cache_key(dataset.source, last_modified)
 
     def fetch(
         self,
@@ -219,7 +192,16 @@ class Catalog:
                     "Versioned fetch (version_id or as_of) is not supported "
                     "for glob pattern datasets"
                 )
-            return self._fetch_glob(dataset, progress, dry_run=dry_run)
+            from datacachalog.core.fetch_operations import fetch_glob
+
+            return fetch_glob(
+                dataset,
+                progress,
+                self._storage,
+                self._cache,
+                self._resolve_cache_path,
+                dry_run=dry_run,
+            )
 
         # Resolve as_of to version_id
         if as_of is not None:
@@ -233,207 +215,84 @@ class Catalog:
 
         # Version-specific fetch
         if version_id is not None:
-            return self._fetch_version(dataset, version_id, progress, dry_run=dry_run)
+            from datacachalog.core.fetch_operations import fetch_version
 
-        # Single file fetch (existing logic)
-        return self._fetch_single(name, dataset, progress, dry_run=dry_run)
+            return fetch_version(
+                dataset,
+                version_id,
+                progress,
+                self._storage,
+                self._cache,
+                self._cache_dir,
+                self._resolve_version_cache_key,
+                dry_run=dry_run,
+            )
 
-    def _fetch_single(
-        self,
-        cache_key: str,
-        dataset: Dataset,
-        progress: ProgressReporter,
-        *,
-        dry_run: bool = False,
-    ) -> Path:
-        """Fetch a single file with caching and staleness detection.
+        # Single file fetch
+        from datacachalog.core.fetch_operations import fetch_single
 
-        Args:
-            cache_key: Key to use for caching (may differ from dataset.name for globs).
-            dataset: Dataset with source to fetch.
-            progress: Progress reporter for download feedback.
-            dry_run: If True, check staleness but skip download and cache updates.
-
-        Returns:
-            Path to the local cached file.
-        """
-        # Check cache
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            cached_path, cache_meta = cached
-            remote_meta = self._storage.head(dataset.source)
-            if not cache_meta.is_stale(remote_meta):
-                return cached_path
-
-        # In dry-run mode, check staleness but don't download or update cache
-        if dry_run:
-            # Still need to check remote metadata for staleness
-            remote_meta = self._storage.head(dataset.source)
-            # Return cached path if exists, otherwise return expected cache path
-            if cached is not None:
-                return cached_path
-            # No cache exists - return expected cache path
-            return self._resolve_cache_path(dataset)
-
-        # Cache miss or stale - download with progress
-        dest = self._resolve_cache_path(dataset)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-
-        remote_meta = self._storage.head(dataset.source)
-        total_size = remote_meta.size or 0
-
-        callback = progress.start_task(cache_key, total_size)
-        try:
-            self._storage.download(dataset.source, dest, callback)
-        finally:
-            progress.finish_task(cache_key)
-
-        # Store in cache with metadata
-        cache_meta = CacheMetadata(
-            etag=remote_meta.etag,
-            last_modified=remote_meta.last_modified,
-            source=dataset.source,
+        return fetch_single(
+            name,
+            dataset,
+            progress,
+            self._storage,
+            self._cache,
+            self._resolve_cache_path,
+            dry_run=dry_run,
         )
-        self._cache.put(cache_key, dest, cache_meta)
 
-        # Return the cache's path (may differ from dest due to cache internals)
-        cached_result = self._cache.get(cache_key)
-        if cached_result is None:
-            # Shouldn't happen - we just put it
-            return dest
-        return cached_result[0]
-
-    def _fetch_version(
+    def load(
         self,
-        dataset: Dataset,
-        version_id: str,
-        progress: ProgressReporter,
+        name: str,
+        progress: ProgressReporter | None = None,
         *,
+        version_id: str | None = None,
+        as_of: datetime | None = None,
         dry_run: bool = False,
-    ) -> Path:
-        """Fetch a specific version of a dataset.
+    ) -> object | Path | list[object] | list[Path]:
+        """Fetch a dataset and load it using the configured reader.
 
-        Downloads the specified version using download_version() and caches
-        it under a date-based filename (YYYY-MM-DDTHHMMSS.ext).
+        This is a convenience method that combines fetch() with reader.read().
+        If dry_run=True, returns the Path(s) without calling the reader.
 
         Args:
-            dataset: Dataset with source to fetch.
-            version_id: S3 version ID to download.
-            progress: Progress reporter for download feedback.
-            dry_run: If True, check version exists but skip download and cache updates.
+            name: The dataset name.
+            progress: Optional progress reporter for download feedback.
+            version_id: Optional S3 version ID to fetch a specific version.
+            as_of: Optional datetime to fetch the version active at that time.
+            dry_run: If True, return Path(s) without calling reader.
 
         Returns:
-            Path to the local cached file.
-        """
-        # Get version metadata to generate date-based cache key
-        remote_meta = self._storage.head_version(dataset.source, version_id)
-
-        # Ensure we have last_modified (required for date-based key)
-        if remote_meta.last_modified is None:
-            raise ValueError(
-                f"Version {version_id} has no last_modified timestamp - cannot generate date-based cache key"
-            )
-
-        # Generate date-based cache key (filename)
-        cache_key = self._resolve_version_cache_key(dataset, remote_meta.last_modified)
-
-        # Check cache for this specific version
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return cached[0]
-
-        # In dry-run mode, return expected cache path without downloading
-        if dry_run:
-            if self._cache_dir is None:
-                raise ConfigurationError("cache_dir is required for versioned fetches")
-            return self._cache_dir / cache_key
-
-        # Download to a temporary location first, then cache will copy to final location
-        import tempfile
-
-        # Ensure cache directory exists
-        if self._cache_dir is None:
-            raise ConfigurationError("cache_dir is required for versioned fetches")
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-
-        with tempfile.NamedTemporaryFile(delete=False, dir=self._cache_dir) as tmp_file:
-            tmp_path = Path(tmp_file.name)
-
-        try:
-            total_size = remote_meta.size or 0
-
-            callback = progress.start_task(cache_key, total_size)
-            try:
-                self._storage.download_version(
-                    dataset.source, tmp_path, version_id, callback
-                )
-            finally:
-                progress.finish_task(cache_key)
-
-            # Store in cache with metadata (cache will copy to final date-based location)
-            cache_meta = CacheMetadata(
-                etag=remote_meta.etag,
-                last_modified=remote_meta.last_modified,
-                source=dataset.source,
-            )
-            self._cache.put(cache_key, tmp_path, cache_meta)
-        finally:
-            # Clean up temporary file if it still exists
-            tmp_path.unlink(missing_ok=True)
-
-        # Return the cache's path
-        cached_result = self._cache.get(cache_key)
-        if cached_result is None:
-            # Shouldn't happen - we just put it, but return the cache's expected path
-            return self._cache_dir / cache_key
-        return cached_result[0]
-
-    def _fetch_glob(
-        self,
-        dataset: Dataset,
-        progress: ProgressReporter,
-        *,
-        dry_run: bool = False,
-    ) -> list[Path]:
-        """Fetch all files matching a glob pattern.
-
-        Args:
-            dataset: Dataset with glob pattern in source.
-            progress: Progress reporter for download feedback.
-            dry_run: If True, check staleness but skip downloads and cache updates.
-
-        Returns:
-            List of paths to local cached files.
+            The loaded data from reader.read(), or Path(s) if dry_run=True.
+            For glob patterns, returns list of loaded objects (or list[Path] if dry_run).
 
         Raises:
-            EmptyGlobMatchError: If no files match the pattern.
+            ReaderNotConfiguredError: If no reader is configured and dry_run=False.
+            DatasetNotFoundError: If no dataset with that name exists.
         """
-        # Split pattern and expand
-        prefix, pattern = split_glob_pattern(dataset.source)
-        matched_uris = self._storage.list(prefix, pattern)
+        from datacachalog.core.exceptions import ReaderNotConfiguredError
 
-        if not matched_uris:
-            raise EmptyGlobMatchError(pattern, prefix)
+        # Fetch the data (handles caching, staleness, versioning)
+        result = self.fetch(
+            name,
+            progress=progress,
+            version_id=version_id,
+            as_of=as_of,
+            dry_run=dry_run,
+        )
 
-        # Fetch each matched file
-        paths: list[Path] = []
-        for uri in matched_uris:
-            # Derive cache key for this specific file
-            cache_key = derive_cache_key(dataset.name, prefix, uri)
+        # In dry-run mode, just return the path(s)
+        if dry_run:
+            return result
 
-            # Create a virtual dataset for this single file
-            single_dataset = Dataset(
-                name=cache_key,
-                source=uri,
-                description=dataset.description,
-            )
+        # Check that reader is configured
+        if self._reader is None:
+            raise ReaderNotConfiguredError(name)
 
-            path = self._fetch_single(
-                cache_key, single_dataset, progress, dry_run=dry_run
-            )
-            paths.append(path)
-
-        return paths
+        # Load single file or list of files
+        if isinstance(result, list):
+            return [self._reader.read(path) for path in result]
+        return self._reader.read(result)
 
     def is_stale(self, name: str) -> bool:
         """Check if a dataset's cache is stale without downloading.
@@ -491,40 +350,11 @@ class Catalog:
     def cache_size(self, name: str) -> int:
         """Calculate cache size for a dataset in bytes.
 
-        Includes both the data file and metadata file for the dataset.
-
-        Args:
-            name: The dataset name.
-
-        Returns:
-            Cache size in bytes. Returns 0 if dataset is not cached.
-
-        Raises:
-            DatasetNotFoundError: If no dataset with that name exists.
+        Returns 0 if not cached. Raises DatasetNotFoundError if name unknown.
         """
-        self.get_dataset(name)  # Validate dataset exists
-        cached = self._cache.get(name)
-        if cached is None:
-            return 0
+        from datacachalog.core.cache_maintenance import calculate_cache_size
 
-        cached_path, _ = cached
-        total_size = 0
-
-        # Add data file size
-        if cached_path.exists():
-            total_size += cached_path.stat().st_size
-
-        # Add metadata file size
-        # Metadata file is typically alongside the data file with .meta.json suffix
-        meta_path = cached_path.parent / f"{cached_path.name}.meta.json"
-        if not meta_path.exists() and hasattr(self._cache, "cache_dir"):
-            # Try alternative location (for flat cache structure)
-            meta_path = self._cache.cache_dir / f"{name}.meta.json"
-
-        if meta_path.exists():
-            total_size += meta_path.stat().st_size
-
-        return total_size
+        return calculate_cache_size(name, self._datasets, self._cache)
 
     def versions(self, name: str, limit: int | None = None) -> list[ObjectVersion]:
         """List available versions of a dataset.
@@ -656,43 +486,6 @@ class Catalog:
         Returns:
             Number of orphaned cache entries removed.
         """
-        all_keys = self._cache.list_all_keys()
-        if not all_keys:
-            return 0
+        from datacachalog.core.cache_maintenance import clean_orphaned_keys
 
-        # Pattern for date-based versioned keys: YYYY-MM-DDTHHMMSS.ext
-        versioned_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}\.[^.]+$")
-
-        # Build set of valid dataset names and glob prefixes
-        valid_dataset_names: set[str] = set()
-        glob_prefixes: set[str] = set()
-
-        for dataset in self._datasets.values():
-            if is_glob_pattern(dataset.source):
-                glob_prefixes.add(f"{dataset.name}/")
-            else:
-                valid_dataset_names.add(dataset.name)
-
-        # Find orphaned keys
-        orphaned: list[str] = []
-        for key in all_keys:
-            # Check for exact match (regular dataset)
-            if key in valid_dataset_names:
-                continue
-
-            # Check for glob dataset prefix match
-            if any(key.startswith(prefix) for prefix in glob_prefixes):
-                continue
-
-            # Check for versioned key pattern
-            if versioned_pattern.match(key):
-                continue
-
-            # Key is orphaned
-            orphaned.append(key)
-
-        # Remove orphaned keys
-        for key in orphaned:
-            self._cache.invalidate(key)
-
-        return len(orphaned)
+        return clean_orphaned_keys(self._cache, self._datasets)
