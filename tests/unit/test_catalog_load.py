@@ -7,7 +7,6 @@ Test Isolation Strategy:
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,6 +14,7 @@ from datacachalog import Dataset
 from datacachalog.adapters.cache import FileCache
 from datacachalog.adapters.storage import FilesystemStorage
 from datacachalog.core.exceptions import ReaderNotConfiguredError
+from datacachalog.core.ports import ProgressCallback
 from datacachalog.core.services import Catalog
 
 
@@ -29,6 +29,23 @@ def cache(tmp_path: Path) -> FileCache:
     """Isolated file cache using tmp_path for test isolation."""
     cache_dir = tmp_path / "cache"
     return FileCache(cache_dir=cache_dir)
+
+
+class TrackingProgressReporter:
+    """Fake progress reporter that tracks method calls for testing."""
+
+    def __init__(self) -> None:
+        self.started_tasks: list[tuple[str, int]] = []
+        self.finished_tasks: list[str] = []
+
+    def start_task(self, name: str, total: int) -> ProgressCallback:
+        """Track task start and return a no-op callback."""
+        self.started_tasks.append((name, total))
+        return lambda downloaded, total: None
+
+    def finish_task(self, name: str) -> None:
+        """Track task finish."""
+        self.finished_tasks.append(name)
 
 
 @pytest.mark.core
@@ -101,7 +118,7 @@ class TestLoad:
     def test_load_passes_fetch_params(
         self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
     ) -> None:
-        """load() should pass version_id, as_of, progress through to fetch()."""
+        """load() should pass progress through to fetch()."""
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
         remote_file = storage_dir / "data.csv"
@@ -124,17 +141,16 @@ class TestLoad:
             datasets=[dataset], storage=storage, cache=cache, reader=reader
         )
 
-        # Create a mock progress reporter
-        progress = MagicMock()
-        progress.start_task.return_value = lambda x, y: None
-        progress.finish_task.return_value = None
+        # Create a fake progress reporter that tracks calls
+        progress = TrackingProgressReporter()
 
         # Call load with progress - verify no exception and result returned
         result = catalog.load("customers", progress=progress)
         assert result == "id,name\n1,Alice\n"
 
         # Verify progress reporter was used (start_task called)
-        progress.start_task.assert_called()
+        assert len(progress.started_tasks) > 0
+        assert progress.started_tasks[0][0] == "customers"
 
     def test_load_dry_run_returns_path(
         self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
