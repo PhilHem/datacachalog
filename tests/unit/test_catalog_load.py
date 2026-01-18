@@ -1,10 +1,34 @@
-"""Unit tests for Catalog.load() method."""
+"""Unit tests for Catalog.load() method.
+
+Test Isolation Strategy:
+- Each test uses pytest's tmp_path fixture for unique directories
+- FileCache instances are created fresh per test with isolated cache_dir
+- No shared state between tests
+"""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from datacachalog import Dataset
+from datacachalog.adapters.cache import FileCache
+from datacachalog.adapters.storage import FilesystemStorage
+from datacachalog.core.exceptions import ReaderNotConfiguredError
+from datacachalog.core.services import Catalog
+
+
+@pytest.fixture
+def storage() -> FilesystemStorage:
+    """Stateless filesystem storage adapter."""
+    return FilesystemStorage()
+
+
+@pytest.fixture
+def cache(tmp_path: Path) -> FileCache:
+    """Isolated file cache using tmp_path for test isolation."""
+    cache_dir = tmp_path / "cache"
+    return FileCache(cache_dir=cache_dir)
 
 
 @pytest.mark.core
@@ -13,21 +37,15 @@ from datacachalog import Dataset
 class TestLoad:
     """Tests for load() method."""
 
-    def test_load_single_file(self, tmp_path: Path) -> None:
+    def test_load_single_file(
+        self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
+    ) -> None:
         """load() should fetch dataset and call reader.read() with the path."""
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.services import Catalog
-
         # Setup: create a "remote" file
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
         remote_file = storage_dir / "data.csv"
         remote_file.write_text("id,name\n1,Alice\n")
-
-        cache_dir = tmp_path / "cache"
-        storage = FilesystemStorage()
-        cache = FileCache(cache_dir=cache_dir)
 
         # Create a simple reader that tracks calls
         class TrackingReader:
@@ -39,6 +57,7 @@ class TestLoad:
                 return path.read_text()
 
         reader = TrackingReader()
+        cache_dir = tmp_path / "cache"
 
         dataset = Dataset(
             name="customers",
@@ -57,21 +76,16 @@ class TestLoad:
         # Verify result is what reader returned
         assert result == "id,name\n1,Alice\n"
 
-    def test_load_raises_without_reader(self, tmp_path: Path) -> None:
+    def test_load_raises_without_reader(
+        self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
+    ) -> None:
         """load() should raise ReaderNotConfiguredError when no reader configured."""
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.exceptions import ReaderNotConfiguredError
-        from datacachalog.core.services import Catalog
-
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
         remote_file = storage_dir / "data.csv"
         remote_file.write_text("id,name\n1,Alice\n")
 
         cache_dir = tmp_path / "cache"
-        storage = FilesystemStorage()
-        cache = FileCache(cache_dir=cache_dir)
 
         dataset = Dataset(
             name="customers",
@@ -84,22 +98,16 @@ class TestLoad:
         with pytest.raises(ReaderNotConfiguredError, match="customers"):
             catalog.load("customers")
 
-    def test_load_passes_fetch_params(self, tmp_path: Path) -> None:
+    def test_load_passes_fetch_params(
+        self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
+    ) -> None:
         """load() should pass version_id, as_of, progress through to fetch()."""
-        from unittest.mock import MagicMock
-
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.services import Catalog
-
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
         remote_file = storage_dir / "data.csv"
         remote_file.write_text("id,name\n1,Alice\n")
 
         cache_dir = tmp_path / "cache"
-        storage = FilesystemStorage()
-        cache = FileCache(cache_dir=cache_dir)
 
         class SimpleReader:
             def read(self, path: Path) -> str:
@@ -128,20 +136,16 @@ class TestLoad:
         # Verify progress reporter was used (start_task called)
         progress.start_task.assert_called()
 
-    def test_load_dry_run_returns_path(self, tmp_path: Path) -> None:
+    def test_load_dry_run_returns_path(
+        self, tmp_path: Path, storage: FilesystemStorage, cache: FileCache
+    ) -> None:
         """load() with dry_run=True should return Path without calling reader."""
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.services import Catalog
-
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
         remote_file = storage_dir / "data.csv"
         remote_file.write_text("id,name\n1,Alice\n")
 
         cache_dir = tmp_path / "cache"
-        storage = FilesystemStorage()
-        cache = FileCache(cache_dir=cache_dir)
 
         class TrackingReader:
             def __init__(self) -> None:
@@ -171,10 +175,6 @@ class TestLoad:
 
     def test_load_glob_returns_list(self, tmp_path: Path) -> None:
         """load() should call reader.read() for each file in glob pattern."""
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.services import Catalog
-
         # Setup: create multiple files
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
@@ -220,10 +220,6 @@ class TestLoad:
 
     def test_load_glob_maintains_order(self, tmp_path: Path) -> None:
         """load() should maintain the order of files from fetch()."""
-        from datacachalog.adapters.cache import FileCache
-        from datacachalog.adapters.storage import FilesystemStorage
-        from datacachalog.core.services import Catalog
-
         # Setup: create files with known order (alphabetical by default)
         storage_dir = tmp_path / "storage"
         storage_dir.mkdir()
