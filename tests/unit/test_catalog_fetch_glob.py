@@ -12,6 +12,13 @@ from datacachalog import Dataset
 class TestFetchGlob:
     """Tests for glob pattern support in fetch()."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_test(self, tmp_path: Path) -> None:
+        """Ensure test isolation - each test gets fresh tmp_path."""
+        # tmp_path provides per-test isolation via pytest
+        # This fixture explicitly signals isolation intent
+        pass
+
     def test_fetch_glob_returns_list_of_paths(self, tmp_path: Path) -> None:
         """fetch() with glob pattern should return list[Path]."""
         from datacachalog.adapters.cache import FileCache
