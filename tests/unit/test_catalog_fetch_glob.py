@@ -423,13 +423,14 @@ class TestFetchGlob:
         import time
         import uuid
 
-        from hypothesis import given
+        from hypothesis import given, settings
         from hypothesis.strategies import binary, integers
 
         from datacachalog.adapters.cache import FileCache
         from datacachalog.adapters.storage import FilesystemStorage
         from datacachalog.core.services import Catalog
 
+        @settings(database=None)  # Disable example persistence for isolation
         @given(
             content=binary(),
             num_calls=integers(min_value=1, max_value=10),
@@ -519,7 +520,7 @@ class TestFetchGlob:
         """Property: Multiple fetch(dry_run=True) calls never modify cache state (metadata, file contents, file count)."""
         import uuid
 
-        from hypothesis import given
+        from hypothesis import given, settings
         from hypothesis.strategies import binary, integers, text
 
         from datacachalog import Dataset
@@ -527,6 +528,7 @@ class TestFetchGlob:
         from datacachalog.adapters.storage import FilesystemStorage
         from datacachalog.core.services import Catalog
 
+        @settings(database=None)  # Disable example persistence for isolation
         @given(
             content=binary(),
             num_calls=integers(min_value=1, max_value=20),
