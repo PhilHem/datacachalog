@@ -33,13 +33,26 @@ class TestReadersPackageExports:
     @pytest.mark.tier(0)
     @pytest.mark.tra("Adapter.Readers.DunderAllCorrect")
     def test_dunder_all_contains_all_readers(self) -> None:
-        """__all__ should list all 4 reader classes."""
+        """__all__ should list all 5 reader classes."""
         from datacachalog.adapters import readers
 
         expected = {
+            "GeoParquetReader",
             "PandasCsvReader",
             "PandasParquetReader",
             "PolarsCsvReader",
             "PolarsParquetReader",
         }
         assert set(readers.__all__) == expected
+
+    @pytest.mark.tier(0)
+    @pytest.mark.tra("Adapter.Readers.ExportsFromPackage")
+    def test_geoparquet_reader_exported_from_readers_package(self) -> None:
+        """GeoParquetReader should be importable from adapters.readers."""
+        from datacachalog.adapters.readers import GeoParquetReader
+
+        # Verify we got the class, not None
+        assert GeoParquetReader is not None
+
+        # Verify it has read method
+        assert hasattr(GeoParquetReader, "read")

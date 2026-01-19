@@ -1,7 +1,10 @@
-.PHONY: test lint format typecheck
+.PHONY: test test-scoped lint format typecheck
 
 test:
 	uv run pytest
+
+test-scoped:
+	uv run pytest $(FILE) -v
 
 lint: typecheck
 	uv run ruff check src/datacachalog/
