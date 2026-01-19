@@ -360,6 +360,7 @@ class TestFetchGlob:
 
     def test_fetch_glob_with_dry_run(self, tmp_path: Path) -> None:
         """fetch(dry_run=True) for glob dataset should check staleness without downloading."""
+        import os
         import time
 
         from datacachalog.adapters.cache import FileCache
@@ -395,9 +396,10 @@ class TestFetchGlob:
         assert cache_entry1_before is not None
         assert cache_entry2_before is not None
 
-        # Modify one file
-        time.sleep(0.1)
+        # Modify one file (use os.utime instead of sleep for determinism)
         file2.write_text("updated 2")
+        future_time = time.time() + 10
+        os.utime(file2, (future_time, future_time))
 
         # Dry-run fetch
         result = catalog.fetch("files", dry_run=True)
@@ -417,6 +419,7 @@ class TestFetchGlob:
     @pytest.mark.timeout(10.0)  # Property-based tests may take longer
     def test_fetch_dry_run_cache_immutability_property(self, tmp_path: Path) -> None:
         """Property: Multiple fetch(dry_run=True) calls never modify cache state."""
+        import os
         import time
         import uuid
 
@@ -459,9 +462,10 @@ class TestFetchGlob:
                 catalog.fetch("test_data")
 
                 if has_cache == 2:  # stale cache
-                    # Modify remote file to make cache stale
-                    time.sleep(0.1)  # Ensure mtime changes
+                    # Modify remote file to make cache stale (use os.utime for determinism)
                     remote_file.write_bytes(content + b"_modified")
+                    future_time = time.time() + 10
+                    os.utime(remote_file, (future_time, future_time))
 
             # Capture initial cache state (may be None if no cache)
             cached_initial = cache.get("test_data")

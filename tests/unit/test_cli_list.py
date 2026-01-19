@@ -193,6 +193,7 @@ class TestCatalogList:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """list --status shows [stale] when dataset is cached but stale."""
+        import os
         import time
 
         storage_dir = tmp_path / "storage"
@@ -217,9 +218,10 @@ class TestCatalogList:
         # Fetch to populate cache
         runner.invoke(app, ["fetch", "customers"])
 
-        # Modify source file to make cache stale
-        time.sleep(1.1)  # Ensure different timestamp
+        # Modify source file to make cache stale (use os.utime instead of sleep for determinism)
         source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+        future_time = time.time() + 10
+        os.utime(source_file, (future_time, future_time))
 
         result = runner.invoke(app, ["list", "--status"])
 

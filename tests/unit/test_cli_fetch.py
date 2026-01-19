@@ -474,6 +474,7 @@ class TestCatalogFetch:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """dry-run shows stale status without downloading or modifying cache."""
+        import os
         import time
 
         # Create source file
@@ -500,9 +501,10 @@ class TestCatalogFetch:
         # First fetch to populate cache
         runner.invoke(app, ["fetch", "customers"])
 
-        # Modify source file to make cache stale
-        time.sleep(0.1)  # Ensure mtime changes
+        # Modify source file and set mtime to future to make cache stale
         source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+        future_time = time.time() + 10  # 10 seconds in the future
+        os.utime(source_file, (future_time, future_time))
 
         # Get cache state before dry-run
         from datacachalog import Catalog
@@ -700,6 +702,7 @@ class TestCatalogFetch:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Multiple dry-run calls should not modify cache state."""
+        import os
         import time
 
         # Create source file
@@ -726,9 +729,10 @@ class TestCatalogFetch:
         # First fetch to populate cache
         runner.invoke(app, ["fetch", "customers"])
 
-        # Modify source to make stale
-        time.sleep(0.1)
+        # Modify source to make stale (use os.utime instead of sleep for determinism)
         source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+        future_time = time.time() + 10
+        os.utime(source_file, (future_time, future_time))
 
         # Get cache state before dry-runs
         from datacachalog import Catalog

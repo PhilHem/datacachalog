@@ -90,6 +90,7 @@ class TestCatalogStatus:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """status shows 'stale' when remote file has changed since caching."""
+        import os
         import time
 
         # Create source file
@@ -116,9 +117,10 @@ class TestCatalogStatus:
         # First fetch to populate cache
         runner.invoke(app, ["fetch", "customers"])
 
-        # Modify source file to make cache stale
-        time.sleep(0.1)  # Ensure mtime changes
+        # Modify source file to make cache stale (use os.utime instead of sleep for determinism)
         source_file.write_text("id,name\n1,Alice\n2,Bob\n")
+        future_time = time.time() + 10
+        os.utime(source_file, (future_time, future_time))
 
         # Now check status
         result = runner.invoke(app, ["status"])
