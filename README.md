@@ -38,6 +38,61 @@ catalog = Catalog(
 path = catalog.fetch("customers")
 ```
 
+## Loading Data with Readers
+
+The catalog supports loading files directly into DataFrames using readers:
+
+```python
+from datacachalog import Dataset, Catalog
+from datacachalog.adapters.readers import PandasParquetReader
+
+# Define dataset
+customers = Dataset(
+    name="customers",
+    source="s3://bucket/customers/data.parquet",
+)
+
+# Create catalog with reader
+catalog = Catalog(
+    datasets=[customers],
+    cache_dir="./data",
+    reader=PandasParquetReader(),
+)
+
+# Load dataset (fetches if stale, then reads into DataFrame)
+df = catalog.load("customers")
+```
+
+### Using Polars
+
+```python
+from datacachalog.adapters.readers import PolarsParquetReader
+
+catalog = Catalog(
+    datasets=[customers],
+    cache_dir="./data",
+    reader=PolarsParquetReader(),
+)
+
+df = catalog.load("customers")  # Returns polars.DataFrame
+```
+
+### Custom Readers
+
+Implement the `Reader` protocol for custom file types:
+
+```python
+from pathlib import Path
+import json
+
+class JsonReader:
+    def read(self, path: Path) -> dict:
+        return json.loads(path.read_text())
+
+catalog = Catalog(datasets=[...], reader=JsonReader())
+data = catalog.load("config")  # Returns dict
+```
+
 ## CLI Usage
 
 The `catalog` CLI provides commands for managing your data catalog:
