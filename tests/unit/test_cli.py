@@ -519,6 +519,7 @@ class TestLoadCatalogDatasets:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("Domain.CLI.Structure")
 @pytest.mark.tier(1)
 class TestCliCommandsStructure:
     """Tests for CLI commands directory structure (task 5so.3.1)."""
@@ -605,6 +606,7 @@ class TestStatusCommandModule:
 
 
 @pytest.mark.cli
+@pytest.mark.tra("Domain.CLI.Formatting")
 @pytest.mark.tier(1)
 class TestFormattingModule:
     """Tests for formatting module (task 5so.3.4)."""

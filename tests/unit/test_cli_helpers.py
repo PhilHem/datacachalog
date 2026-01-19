@@ -13,6 +13,7 @@ runner = CliRunner()
 
 
 @pytest.mark.cli
+@pytest.mark.tra("UseCase.CatalogLoading")
 @pytest.mark.tier(1)
 class TestLoadCatalogContext:
     """Tests for load_catalog_context helper function."""
