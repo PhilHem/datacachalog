@@ -78,7 +78,7 @@ datasets = [
 ]
 """)
 
-        datasets, cache_dir = load_catalog(catalog_file)
+        datasets, cache_dir = load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert len(datasets) == 2
         assert datasets[0].name == "customers"
@@ -96,7 +96,7 @@ datasets = []
 cache_dir = "data/custom"
 """)
 
-        datasets, cache_dir = load_catalog(catalog_file)
+        datasets, cache_dir = load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert datasets == []
         assert cache_dir == "data/custom"
@@ -110,8 +110,31 @@ from datacachalog import Dataset
 datasets = []
 """)
 
-        _datasets, cache_dir = load_catalog(catalog_file)
+        _datasets, cache_dir = load_catalog(catalog_file, catalog_root=tmp_path)
 
+        assert cache_dir is None
+
+    def test_load_catalog_requires_catalog_root(self, tmp_path: Path) -> None:
+        """load_catalog() raises TypeError when catalog_root is not provided."""
+        catalog_file = tmp_path / "test_catalog.py"
+        catalog_file.write_text("datasets = []")
+
+        with pytest.raises(TypeError) as exc_info:
+            load_catalog(catalog_file)  # Missing required catalog_root
+
+        assert "catalog_root" in str(exc_info.value)
+
+    def test_load_catalog_accepts_explicit_catalog_root(self, tmp_path: Path) -> None:
+        """load_catalog() works when catalog_root is explicitly provided."""
+        catalog_root = tmp_path / "allowed"
+        catalog_root.mkdir()
+
+        catalog_file = catalog_root / "test_catalog.py"
+        catalog_file.write_text("datasets = []")
+
+        datasets, cache_dir = load_catalog(path=catalog_file, catalog_root=catalog_root)
+
+        assert datasets == []
         assert cache_dir is None
 
 
@@ -127,7 +150,7 @@ class TestLoadCatalogErrorHandling:
         catalog_file.write_text("def broken(\n")  # Missing close paren
 
         with pytest.raises(CatalogLoadError) as exc_info:
-            load_catalog(catalog_file)
+            load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert exc_info.value.catalog_path == catalog_file
         assert exc_info.value.line is not None
@@ -139,7 +162,7 @@ class TestLoadCatalogErrorHandling:
         catalog_file.write_text("from nonexistent_module import something")
 
         with pytest.raises(CatalogLoadError) as exc_info:
-            load_catalog(catalog_file)
+            load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert exc_info.value.catalog_path == catalog_file
         assert "nonexistent_module" in str(exc_info.value)
@@ -150,7 +173,7 @@ class TestLoadCatalogErrorHandling:
         catalog_file.write_text("datasets = undefined_var")
 
         with pytest.raises(CatalogLoadError) as exc_info:
-            load_catalog(catalog_file)
+            load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert exc_info.value.catalog_path == catalog_file
         assert "undefined_var" in str(exc_info.value)
@@ -166,7 +189,7 @@ datasets = [Dataset(name="", source="s3://bucket/file.parquet")]
 """)
 
         with pytest.raises(CatalogLoadError) as exc_info:
-            load_catalog(catalog_file)
+            load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert exc_info.value.catalog_path == catalog_file
 
@@ -176,7 +199,7 @@ datasets = [Dataset(name="", source="s3://bucket/file.parquet")]
         catalog_file.write_text("def broken(\n")
 
         with pytest.raises(CatalogLoadError) as exc_info:
-            load_catalog(catalog_file)
+            load_catalog(catalog_file, catalog_root=tmp_path)
 
         assert exc_info.value.cause is not None
         assert isinstance(exc_info.value.cause, SyntaxError)

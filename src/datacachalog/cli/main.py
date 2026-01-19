@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from datacachalog.core.exceptions import CatalogLoadError
+from datacachalog.core.exceptions import CatalogLoadError, UnsafeCatalogPathError
 
 
 if TYPE_CHECKING:
@@ -103,10 +103,18 @@ def load_catalog_context(
     # Load all datasets
     all_ds = []
     cache_dir = "data"
+    catalog_root = root / ".datacachalog" / "catalogs"
     for _catalog_name, catalog_path in catalogs.items():
         try:
-            datasets, cat_cache_dir = load_catalog(catalog_path)
+            datasets, cat_cache_dir = load_catalog(
+                catalog_path, catalog_root=catalog_root
+            )
         except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        except UnsafeCatalogPathError as e:
             typer.echo(f"Error: {e}", err=True)
             if e.recovery_hint:
                 typer.echo(f"Hint: {e.recovery_hint}", err=True)
@@ -472,10 +480,16 @@ def info(
     catalog_datasets: list[
         tuple[str, str, Dataset]
     ] = []  # (catalog_name, ds_name, dataset)
+    catalog_root = _root / ".datacachalog" / "catalogs"
     for catalog_name, catalog_path in catalogs.items():
         try:
-            datasets, _ = load_catalog(catalog_path)
+            datasets, _ = load_catalog(catalog_path, catalog_root=catalog_root)
         except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        except UnsafeCatalogPathError as e:
             typer.echo(f"Error: {e}", err=True)
             if e.recovery_hint:
                 typer.echo(f"Hint: {e.recovery_hint}", err=True)
@@ -579,10 +593,16 @@ def cache_stats(
     catalog_datasets: list[
         tuple[str, str, Dataset]
     ] = []  # (catalog_name, ds_name, dataset)
+    catalog_root = _root / ".datacachalog" / "catalogs"
     for catalog_name, catalog_path in sorted(catalogs.items()):
         try:
-            datasets, _ = load_catalog(catalog_path)
+            datasets, _ = load_catalog(catalog_path, catalog_root=catalog_root)
         except CatalogLoadError as e:
+            typer.echo(f"Error: {e}", err=True)
+            if e.recovery_hint:
+                typer.echo(f"Hint: {e.recovery_hint}", err=True)
+            raise typer.Exit(1) from None
+        except UnsafeCatalogPathError as e:
             typer.echo(f"Error: {e}", err=True)
             if e.recovery_hint:
                 typer.echo(f"Hint: {e.recovery_hint}", err=True)

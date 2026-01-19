@@ -60,9 +60,10 @@ def _load_catalog_datasets(
 
     # Load datasets per catalog to track catalog names
     catalog_datasets: list[tuple[str, str, str]] = []  # (catalog_name, ds_name, source)
+    catalog_root = root / ".datacachalog" / "catalogs"
 
     for catalog_name_item, catalog_path in sorted(catalogs.items()):
-        datasets, _ = load_catalog(catalog_path)
+        datasets, _ = load_catalog(catalog_path, catalog_root=catalog_root)
         # CatalogLoadError will propagate up if load_catalog fails
         for ds in datasets:
             catalog_datasets.append((catalog_name_item, ds.name, ds.source))
